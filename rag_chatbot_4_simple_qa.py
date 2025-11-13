@@ -34,9 +34,10 @@ db = Chroma(persist_directory=persistent_directory, embedding_function=embedding
 print("✓ Vector store loaded successfully\n")
 
 # Create a retriever for querying the vector store
+# Increase k to get more relevant documents, especially for ranking questions
 retriever = db.as_retriever(
     search_type="similarity",
-    search_kwargs={"k": 3},
+    search_kwargs={"k": 5},  # Increased from 3 to 5 for better coverage
 )
 
 # Create a ChatGroq model
@@ -60,6 +61,8 @@ print("✓ GROQ LLM initialized\n")
 qa_system_prompt = (
     "You are an assistant for question-answering tasks about Physical Sciences research data. "
     "Use the following pieces of retrieved context to answer the question. "
+    "When asked about 'top' or 'most' items, analyze the numbers in the context (like work counts) to determine rankings. "
+    "If the context contains multiple items with counts, identify which has the highest number. "
     "If you don't know the answer based on the context provided, just say that you don't know. "
     "Keep your answer concise and based only on the information provided in the context. "
     "Do not make up information that is not in the context.\n\n"
@@ -110,11 +113,20 @@ def simple_qa():
             continue
 
         try:
+            # First, retrieve documents to check what we're getting
+            retrieved_docs = retriever.invoke(query)
+
             # Process the user's query through the retrieval chain
             result = rag_chain.invoke(query)
 
             # Display the AI's response
             print(f"\nAI: {result}\n")
+
+            # Optional: Show what documents were retrieved (for debugging)
+            # Uncomment the next lines if you want to see what was retrieved:
+            # print(f"[Debug: Retrieved {len(retrieved_docs)} documents]")
+            # for i, doc in enumerate(retrieved_docs[:2], 1):
+            #     print(f"  Doc {i}: {doc.page_content[:80]}...")
 
         except Exception as e:
             print(f"\nError: {e}\n")
