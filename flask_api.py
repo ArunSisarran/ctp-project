@@ -2,6 +2,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import os
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)  
@@ -54,7 +57,8 @@ def home():
             '/api/search/subfield?q=<query>': 'Search subfields by name',
             '/api/search/topic?q=<query>': 'Search topics by name',
             '/api/summary': 'Get complete data summary',
-            '/api/reload': 'Reload data from CSV files'
+            '/api/reload': 'Reload data from CSV files',
+            '/api/subfields/graph': 'Get subfields graph data with semantic similarity'
         }
     })
 
@@ -269,6 +273,76 @@ def reload():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+@app.route('/api/subfields/graph')
+def get_subfields_graph():
+    """
+    Get subfields graph data with semantic similarity.
+    Returns nodes (subfields) and links (similarity edges) for force-directed graph.
+    """
+    data = load_data()
+    if data is None:
+        return jsonify({'error': 'Data not loaded'}), 500
+    
+    subfields_df = data['subfields']
+    
+    if len(subfields_df) == 0:
+        return jsonify({'error': 'No subfields data available'}), 404
+    
+    # Prepare node data
+    nodes = []
+    subfield_names = []
+    min_works = subfields_df['us_works_count'].min()
+    max_works = subfields_df['us_works_count'].max()
+    works_range = max_works - min_works if max_works != min_works else 1
+    
+    for idx, row in subfields_df.iterrows():
+        # Normalize size based on us_works_count (for visualization)
+        # Scale between 10 and 50 (pixels)
+        normalized_size = 10 + ((row['us_works_count'] - min_works) / works_range) * 40
+        
+        nodes.append({
+            'id': str(row['id']),
+            'name': row['name'],
+            'us_works_count': int(row['us_works_count']),
+            'size': float(normalized_size)
+        })
+        subfield_names.append(row['name'])
+    
+    # Compute semantic similarity using TF-IDF and cosine similarity
+    try:
+        vectorizer = TfidfVectorizer(stop_words='english', lowercase=True, ngram_range=(1, 2))
+        tfidf_matrix = vectorizer.fit_transform(subfield_names)
+        similarity_matrix = cosine_similarity(tfidf_matrix)
+        
+        # Create links based on similarity threshold
+        # Only connect subfields with similarity above threshold
+        similarity_threshold = 0.15  # Adjust this to control edge density
+        links = []
+        
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                similarity = float(similarity_matrix[i][j])
+                if similarity > similarity_threshold:
+                    links.append({
+                        'source': nodes[i]['id'],
+                        'target': nodes[j]['id'],
+                        'similarity': similarity,
+                        'strength': similarity  # Used for link width/thickness
+                    })
+        
+    except Exception as e:
+        print(f"Error computing similarity: {e}")
+        # Return graph without links if similarity computation fails
+        links = []
+    
+    return jsonify({
+        'nodes': nodes,
+        'links': links,
+        'min_works_count': int(min_works),
+        'max_works_count': int(max_works)
+    })
 
 
 if __name__ == '__main__':
