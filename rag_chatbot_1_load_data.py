@@ -20,7 +20,7 @@ csv_files = {
     },
     "subfield_funders_us.csv": {
         "type": "funder",
-        "text_template": "The top funder for subfield {subfield_name} (ID: {subfield_id}) is {funder_name} (ID: {funder_id}) with {subfield_works_count:,} works in this subfield. The funder has {total_works_count:,} total works and is located in {country_code}."
+        "text_template": "The funder for subfield {subfield_name} (ID: {subfield_id}) is {funder_name} (ID: {funder_id}) with {subfield_works_count:,} works in this subfield. The funder has {total_works_count:,} total works and is located in {country_code}."
     },
     "top_topics_us.csv": {
         "type": "topic",
@@ -61,7 +61,8 @@ def create_documents_from_csv(file_path, file_config):
             # Create metadata dictionary
             metadata = {
                 "source": file_name,
-                "type": doc_type
+                "type": doc_type,
+                "category":'Physical Sciences'  # Add category metadata
             }
 
             # Add all row data to metadata (convert to string for non-null values)

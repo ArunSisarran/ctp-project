@@ -37,7 +37,8 @@ print("✓ Vector store loaded successfully\n")
 # Create a retriever for querying the vector store
 retriever = db.as_retriever(
     search_type="similarity",
-    search_kwargs={"k": 5},  # Get 5 documents for better coverage
+    search_kwargs={"k": 20},  # Get 5 documents for better coverage
+    filter={"category": "Physical Sciences"}
 )
 
 # Create a ChatGroq model
@@ -81,12 +82,8 @@ contextualize_q_prompt = ChatPromptTemplate.from_messages(
 qa_system_prompt = (
     "You are an assistant for question-answering tasks about Physical Sciences research data. "
     "Use the following pieces of retrieved context to answer the question. "
-    "When asked about 'top' or 'most' items, analyze the numbers in the context (like work counts) to determine rankings. "
-    "If the context contains multiple items with counts, identify which has the highest number. "
-    "You can also use the chat history to understand context from previous messages. "
-    "If you don't know the answer based on the context provided, just say that you don't know. "
-    "Keep your answer concise and based only on the information provided in the context. "
-    "Do not make up information that is not in the context.\n\n"
+    "You are specifically asked to list all the fields in the Physical Sciences data. "
+    "Do not summarize or omit any of the fields. If there are multiple fields, list them all."
     "Context:\n{context}"
 )
 
@@ -121,8 +118,10 @@ def get_contextualized_retrieval(input_data):
     else:
         reformulated_query = query
 
+    filter_metadata = {"category": "Physical Sciences"}
     # Retrieve documents using the (possibly reformulated) query
-    retrieved_docs = retriever.invoke(reformulated_query)
+    retrieved_docs = retriever.invoke(reformulated_query, filter=filter_metadata)
+    # print("Retrieved:",format_docs(retrieved_docs))
     return format_docs(retrieved_docs)
 
 # Create the RAG chain with history awareness
