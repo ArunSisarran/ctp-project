@@ -20,3 +20,7 @@ chromadb
 python-dotenv
 sentence-transformers
 torch
+
+# Flask API dependencies (Milestone 7)
+flask
+flask-cors
