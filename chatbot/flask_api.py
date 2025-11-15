@@ -1,9 +1,8 @@
 """
 Flask API for RAG Chatbot
-Milestone 7: Simple REST API implementation
 
 This module provides a basic REST API endpoint for the conversational RAG chatbot.
-Code is based on rag_chatbot_3_conversational.py
+Code is based on conversational.py
 """
 
 import os
@@ -26,7 +25,7 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Import vector store creation functions
-from chatbot.rag_chatbot_2_create_vectorstore import create_vectorstore, check_if_rebuild_needed
+from chatbot.create_vectorstore import create_vectorstore, check_if_rebuild_needed
 
 # Load environment variables from .env
 load_dotenv()

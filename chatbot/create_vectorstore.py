@@ -13,12 +13,12 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from chatbot.rag_chatbot_1_load_data import load_all_csv_documents
+from chatbot.load_data import load_all_csv_documents
 
 # Import data directory and CSV files config from the load_data module
-import chatbot.rag_chatbot_1_load_data as rag_chatbot_1_load_data
-data_dir = rag_chatbot_1_load_data.data_dir
-csv_files = rag_chatbot_1_load_data.csv_files
+import chatbot.load_data as load_data
+data_dir = load_data.data_dir
+csv_files = load_data.csv_files
 
 # Load environment variables from .env (for future use with GROQ)
 load_dotenv()
