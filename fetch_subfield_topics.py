@@ -2,8 +2,13 @@ import os
 import pandas as pd
 from datetime import datetime
 from pyalex import Works, config
+from dotenv import load_dotenv
 
-config.email = "annie16950@gmail.com"
+# Load environment variables from .env file
+load_dotenv()
+
+# Set email from environment variable
+config.email = os.getenv('OPENALEX_EMAIL')
 
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)

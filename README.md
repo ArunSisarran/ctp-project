@@ -4,8 +4,7 @@
 - Project Scope: Analyze the trends in science and technology research using data from OpenAlex.
 - Audience: Researchers, policymakers, and students interested in understanding the trends in science and technology research.
 
-## 🌟 Key Features
-
+## Key Features
 - **Interactive Force-Directed Graph**: Visualizes relationships between the top 10 US research subfields in Physical Sciences
 - **Semantic Similarity Connections**: Nodes are connected based on topic similarity using TF-IDF and cosine similarity
 - **Dynamic Topic Exploration**: Click any subfield node to explore the top 20 trending topics within that field
@@ -30,7 +29,13 @@
    pip install -r requirements.txt
    ```
 
-3. **Fetch the data**
+3. **Configure environment variables**
+   ```bash
+   # Create .env file with your OpenAlex API email
+   echo "OPENALEX_EMAIL=your-email@example.com" > .env
+   ```
+
+4. **Fetch the data**
    ```bash
    # Fetch base datasets
    python save_data_csv.py
@@ -39,15 +44,15 @@
    python fetch_subfield_topics.py
    ```
 
-4. **Start the application**
+5. **Start the application**
    ```bash
    python flask_api.py
    ```
 
-5. **Open in browser**
+6. **Open in browser**
    Navigate to `http://localhost:5000/subfields.html`
 
-## 📊 Data Sources
+## Data Sources
 
 The application uses data from [OpenAlex](https://openalex.org/), a comprehensive open database of scholarly works:
 
@@ -56,7 +61,7 @@ The application uses data from [OpenAlex](https://openalex.org/), a comprehensiv
 - **Funders**: Top US funders for each subfield
 - **Work Counts**: Number of research works from US institutions
 
-## 🛠 Tech Stack
+## Tech Stack
 
 ### Backend
 - **Flask**: Web framework for API endpoints
@@ -79,7 +84,7 @@ The application uses data from [OpenAlex](https://openalex.org/), a comprehensiv
 - `GET /api/health` - Health check and data status
 - `GET /api/subfields/graph` - Get subfield graph data with similar- `GET /api/topics/subfield/<id>` - Get topics for specific subfield with graph structure
 
-## 🎨 Visualization Features
+## Visualization Features
 
 ### Force-Directed Graphs
 - **Node Size**: Proportional to US works count in the subfield
@@ -91,7 +96,7 @@ The application uses data from [OpenAlex](https://openalex.org/), a comprehensiv
   - Reset view to initial state
 - **Semantic Connections**: Topics linked by name similarity
 
-## 🔄 Data Refresh
+## Data Refresh
 
 The data can be refreshed to get the latest trends:
 
@@ -104,7 +109,7 @@ python fetch_subfield_topics.py
 python fetch_subfield_topics.py  # Just topics
 ```
 
-## 📈 Similarity Algorithm
+## Similarity Algorithm
 
 The application uses TF-IDF vectorization with cosine similarity to determine relationships:
 
@@ -116,15 +121,12 @@ The application uses TF-IDF vectorization with cosine similarity to determine re
 3. **Cosine Similarity**: Measures angular similarity between vectors
 4. **Threshold Filtering**: Links created for similarity > 0.12
 
-## 📝 Future Enhancements
+## Future Enhancements
 
 - [ ] Add more domains beyond Physical Sciences
 
-## 📄 License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [OpenAlex](https://openalex.org/) for providing comprehensive scholarly data
 - [D3.js](https://d3js.org/) for powerful data visualization capabilities

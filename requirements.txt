@@ -6,6 +6,7 @@ idna==3.11
 numpy==2.3.4
 pandas==2.3.3
 pyalex==0.18
+python-dotenv==1.0.0
 python-dateutil==2.9.0.post0
 pytz==2025.2
 requests==2.32.5

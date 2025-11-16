@@ -3,8 +3,12 @@ from typing import List, Dict
 import pandas as pd
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
-config.email = "arunsisarrancs@gmail.com"
+# Load environment variables from .env file
+load_dotenv()
+
+config.email = os.getenv('OPENALEX_EMAIL', 'arunsisarrancs@gmail.com')
 
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)

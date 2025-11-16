@@ -1,8 +1,12 @@
 from pyalex import Topics, Funders, Works, config
 from typing import List, Dict
 from collections import Counter
+from dotenv import load_dotenv
 
-config.email = "arunsisarrancs@gmail.com"
+# Load environment variables from .env file
+load_dotenv()
+
+config.email = os.getenv('OPENALEX_EMAIL')
 
 def get_fields_in_domain(domain_id: int = 3) -> List[Dict]:
     try:
