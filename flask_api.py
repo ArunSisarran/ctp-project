@@ -28,10 +28,10 @@ def load_data():
             'topics': pd.read_csv(os.path.join(DATA_DIR, 'top_topics_us.csv'))
         }
         
-        # Load top 50 popular topics if available
-        top_50_path = os.path.join(DATA_DIR, 'top_50_popular_topics.csv')
-        if os.path.exists(top_50_path):
-            data_cache['top_50_topics'] = pd.read_csv(top_50_path)
+        # Load subfield topics data (top 20 topics for each of top 10 subfields)
+        subfield_topics_path = os.path.join(DATA_DIR, 'subfield_topics_us.csv')
+        if os.path.exists(subfield_topics_path):
+            data_cache['subfield_topics'] = pd.read_csv(subfield_topics_path)
         
         print("✓ Data loaded successfully")
         return data_cache
@@ -65,7 +65,7 @@ def home():
             '/api/summary': 'Get complete data summary',
             '/api/reload': 'Reload data from CSV files',
             '/api/subfields/graph': 'Get subfields graph data with semantic similarity',
-            '/api/topics/popular': 'Get top 50 most popular topics for US',
+            '/api/topics/popular': 'Get top topics for all top 10 US subfields',
             '/api/topics/subfield/<subfield_id>': 'Get topics graph for a specific subfield'
         }
     })
@@ -92,7 +92,7 @@ def health():
             'subfields': len(data['subfields']),
             'funders': len(data['funders']),
             'topics': len(data['topics']),
-            'top_50_topics': len(data.get('top_50_topics', pd.DataFrame()))
+            'subfield_topics': len(data.get('subfield_topics', pd.DataFrame()))
         }
     })
 
@@ -287,21 +287,49 @@ def reload():
 @app.route('/api/topics/popular')
 def get_popular_topics():
     """
-    Get top 50 most popular topics based on US works count.
+    Get top topics for all top 10 US subfields.
+    Returns organized data by subfield with top 20 topics per subfield.
     """
     data = load_data()
     if data is None:
         return jsonify({'error': 'Data not loaded'}), 500
     
-    if 'top_50_topics' not in data:
+    if 'subfield_topics' not in data:
         return jsonify({
-            'error': 'Top 50 topics data not found. Run save_data_csv.py to fetch the data.'
+            'error': 'Subfield topics data not found. Run fetch_subfield_topics.py to fetch the data.'
         }), 404
     
-    topics = data['top_50_topics'].to_dict('records')
+    topics_df = data['subfield_topics']
+    
+    # Group topics by subfield_id
+    organized_topics = {}
+    subfield_info = {}
+    
+    for _, topic in topics_df.iterrows():
+        subfield_id = str(topic['subfield_id'])
+        
+        if subfield_id not in organized_topics:
+            organized_topics[subfield_id] = []
+            # Store subfield info
+            subfield_info[subfield_id] = {
+                'id': subfield_id,
+                'name': topic.get('subfield', 'Unknown'),
+                'field': topic.get('field', 'Unknown')
+            }
+        
+        organized_topics[subfield_id].append({
+            'id': str(topic['id']),
+            'display_name': topic['name'],
+            'us_works_count': topic['us_works_count'],
+            'field': topic.get('field', 'Unknown'),
+            'subfield': topic.get('subfield', 'Unknown')
+        })
+    
     return jsonify({
-        'count': len(topics),
-        'data': topics
+        'subfields': subfield_info,
+        'topics_by_subfield': organized_topics,
+        'total_subfields': len(organized_topics),
+        'total_topics': len(topics_df)
     })
 
 
@@ -315,9 +343,9 @@ def get_topics_by_subfield(subfield_id):
     if data is None:
         return jsonify({'error': 'Data not loaded'}), 500
     
-    if 'top_50_topics' not in data:
+    if 'subfield_topics' not in data:
         return jsonify({
-            'error': 'Top 50 topics data not found. Run save_data_csv.py to fetch the data.'
+            'error': 'Subfield topics data not found. Run fetch_subfield_topics.py to fetch the data.'
         }), 404
     
     try:
@@ -326,25 +354,19 @@ def get_topics_by_subfield(subfield_id):
         return jsonify({'error': 'Invalid subfield ID'}), 400
     
     # Filter topics by subfield ID (need to check if subfield matches)
-    # Since we don't have subfield ID in topics CSV directly, we'll use the subfield name
-    # First get the subfield name
-    subfields_df = data['subfields']
-    subfield = subfields_df[subfields_df['id'] == subfield_id_int]
-    
-    if subfield.empty:
-        return jsonify({'error': 'Subfield not found'}), 404
-    
-    subfield_name = subfield.iloc[0]['name']
-    
-    # Get topics that match this subfield (case-insensitive partial match)
-    topics_df = data['top_50_topics']
-    matching_topics = topics_df[topics_df['subfield'].str.contains(subfield_name, case=False, na=False)]
+    # Get topics for this specific subfield using subfield_id
+    topics_df = data['subfield_topics']
+    # CSV values are read as integers by pandas
+    matching_topics = topics_df[topics_df['subfield_id'] == subfield_id_int]
     
     if len(matching_topics) == 0:
         return jsonify({
-            'error': f'No topics found for subfield: {subfield_name}',
-            'subfield_name': subfield_name
+            'error': f'No topics found for subfield ID: {subfield_id}',
+            'subfield_id': subfield_id
         }), 404
+    
+    # Get subfield name from the first matching topic
+    subfield_name = matching_topics.iloc[0].get('subfield', 'Unknown')
     
     # Prepare node data
     nodes = []
