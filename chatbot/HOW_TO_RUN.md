@@ -8,7 +8,6 @@ This guide explains how to run the RAG chatbot with Flask API and web interface.
 2. **Required Python packages** (install via `pip install -r requirements.txt`)
 3. **API Keys**:
    - GROQ API key (for LLM)
-   - OpenAI API key (for embeddings)
 
 ## Step 1: Install Dependencies
 
@@ -26,10 +25,9 @@ Create a `.env` file in the project root directory (if it doesn't exist) with yo
 ```bash
 # .env file
 GROQ_API_KEY=your_groq_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-**Note:** Replace `your_groq_api_key_here` and `your_openai_api_key_here` with your actual API keys.
+**Note:** Replace `your_groq_api_key_here` with your actual API keys.
 
 ## Step 3: Verify Vector Store
 
@@ -39,7 +37,7 @@ To manually create/rebuild the vector store:
 
 ```bash
 cd chatbot
-python rag_chatbot_2_create_vectorstore.py
+python3 create_vectorstore.py
 ```
 
 ## Step 4: Start the Flask API Server
@@ -51,25 +49,12 @@ cd chatbot
 python flask_api.py
 ```
 
-You should see output like:
-```
-Initializing RAG chain...
-Loading embedding model...
-Loading vector store...
-✓ Vector store loaded successfully
-✓ GROQ LLM initialized
-✓ RAG chain initialized successfully
-
-Starting Flask API server on port 5000
-Debug mode: False
-API endpoint: POST /api/chat
-```
-
 **Keep this terminal window open** - the server needs to keep running.
 
 ## Step 5: Open the Web Interface
 
 1. Open `index.html` in your web browser:
+
    - You can double-click the file, or
    - Right-click and select "Open with" → your browser, or
    - Use a local web server (recommended for development):
@@ -91,53 +76,31 @@ API endpoint: POST /api/chat
 2. **Type your question** in the input field and press Enter or click Send
 
 Example questions:
+
 - "What are the top subfields in Physical Sciences?"
 - "What fields are in Physical Sciences?"
 - "What are the top topics in Physical Sciences?"
-- "Who funds research in Electrical and Electronic Engineering?"
 
 ## Troubleshooting
 
 ### Flask API won't start
 
 **Error: "GROQ_API_KEY not found"**
+
 - Make sure you have a `.env` file in the project root
 - Verify the API key is correct in the `.env` file
 - Restart the Flask server after adding/updating the `.env` file
 
 **Error: "Vector store not found"**
-- The vector store will be created automatically on first run
-- If it fails, manually run: `python rag_chatbot_2_create_vectorstore.py`
 
-**Error: "Port 5000 already in use"**
-- Another process is using port 5000
-- Either stop that process, or change the port:
-  ```bash
-  PORT=5001 python flask_api.py
-  ```
-- Then update `API_URL` in `chatbot/chatbot.js` to match
+- The vector store will be created automatically on first run
+- If it fails, manually run: `python create_vectorstore.py`
 
 ### Chatbot shows "Offline" status
 
 - Make sure the Flask API server is running
 - Check that the API URL in `chatbot/chatbot.js` matches your Flask server port
 - Default: `http://localhost:5000/api/chat`
-- Open browser console (F12) to see any error messages
-
-### Chatbot doesn't respond
-
-- Check the Flask API terminal for error messages
-- Verify your GROQ API key is valid and has credits
-- Check browser console (F12) for JavaScript errors
-- Make sure CORS is enabled in Flask (it should be by default)
-
-### CORS errors in browser console
-
-- Flask-CORS should be installed and enabled (it's in `flask_api.py`)
-- If you see CORS errors, make sure `flask-cors` is installed:
-  ```bash
-  pip install flask-cors
-  ```
 
 ## File Structure
 
@@ -162,15 +125,9 @@ ctp-project/
 4. Open `index.html` in browser
 5. Click chat button (💬) and start chatting!
 
-## Stopping the Server
-
-To stop the Flask API server:
-- Press `Ctrl+C` in the terminal where it's running
-
 ## Notes
 
 - The Flask API must be running for the chatbot to work
 - The chatbot uses conversation history (stored in memory, resets when server restarts)
 - Vector store is created automatically if it doesn't exist
 - The chatbot connects to `http://localhost:5000/api/chat` by default
-
