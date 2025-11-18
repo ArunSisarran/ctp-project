@@ -8,6 +8,7 @@ Code is based on conversational.py
 import os
 import sys
 import shutil
+import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -128,39 +129,52 @@ def initialize_rag_chain():
         ]
     )
 
-    # Answer question prompt
-    # This system prompt helps the AI understand that it should provide concise answers
-    # based on the retrieved context and indicates what to do if the answer is unknown
-    qa_system_prompt = (
-        "You are an assistant for question-answering tasks about Physical Sciences "
-        "research data. Use the following pieces of retrieved context to answer the "
-        "question. You are specifically asked to list all the fields, subfields, topics, founders in the Physical "
-        "Sciences data. Do not summarize or omit any of the fields, subfields, topics, founders. If there are "
-        "multiple fields, subfields, topics, founders, list them all.\n\n"
-        "IMPORTANT FORMATTING INSTRUCTIONS:\n"
-        "- Write responses in natural, conversational sentences. Do NOT use markdown "
-        "formatting like **, # .\n"
-        "- Do NOT include IDs (like 'ID: 22' or 'ID: 2208') in your responses. "
-        "Only mention names and relevant numbers.\n"
-        "- Express information in complete sentences when summarize, not lists or structured formats.\n"
-        "- Make the response flow naturally as if you're explaining to someone in "
-        "conversation.\n"
-        "Context:\n{context}"
-    )
+    # Answer question prompt - will be created dynamically based on query type
+    def create_qa_system_prompt(is_list_query=False):
+        """Create system prompt based on whether this is a list query."""
+        base_prompt = (
+            "You are an assistant for question-answering tasks about Physical Sciences "
+            "research data. Use the following pieces of retrieved context to answer the "
+            "question.\n\n"
+            "CRITICAL RULES:\n"
+            "- NEVER include IDs (like 'ID: 22', 'ID: 2208', 'ID: 1312', or any ID numbers) in your responses.\n"
+            "- Only mention names and relevant numbers (like work counts, topic counts, etc.).\n"
+        )
 
-    # Create a prompt template for answering questions
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", qa_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
+        if is_list_query:
+            list_format = (
+                "- Format your response as a CLEAR LIST, with each item on a new line.\n"
+                "- Use a simple format like: '1. Item Name' or '- Item Name' for each item.\n"
+                "- Do NOT use markdown formatting like **, #, or ```.\n"
+                "- List ALL items from the context. Do not omit or summarize any items.\n"
+                "- You can add a brief introductory sentence before the list if helpful.\n"
+            )
+            return base_prompt + list_format + "\nContext:\n{context}"
+
+        sentence_format = (
+                "- Write responses in natural, conversational sentences.\n"
+                "- Do NOT use markdown formatting like **, #, or ```.\n"
+                "- Express information in complete sentences, not lists or structured formats.\n"
+                "- Make the response flow naturally as if you're explaining to someone in conversation.\n"
+            )
+        return base_prompt + sentence_format + "\nContext:\n{context}"
+
+    # Create a prompt template for answering questions (will be created dynamically)
+    # We'll create it in the retrieval function based on query type
 
     # Format documents function
     def format_docs(docs):
-        """Format retrieved documents into a single string."""
-        return "\n\n".join(doc.page_content for doc in docs)
+        """Format retrieved documents into a single string, removing IDs."""
+        formatted_docs = []
+        for doc in docs:
+            # Remove ID patterns like "(ID: 1234)" or "ID: 1234" from content
+            content = doc.page_content
+            # Remove patterns like "(ID: 1234)" or "ID: 1234" or "ID:1234"
+            content = re.sub(r'\s*\(?ID:\s*\d+\)?\s*', ' ', content, flags=re.IGNORECASE)
+            # Clean up extra spaces
+            content = re.sub(r'\s+', ' ', content).strip()
+            formatted_docs.append(content)
+        return "\n\n".join(formatted_docs)
 
     # Create a history-aware retriever function
     def get_contextualized_retrieval(input_data):
@@ -222,19 +236,38 @@ def initialize_rag_chain():
             retrieved_docs = retriever.invoke(reformulated_query)
             print(f"Retrieved {len(retrieved_docs)} documents (similarity search)")
 
+        # Store whether this is a list query for use in prompt
+        input_data["_is_list_query"] = is_list_all_query
         return format_docs(retrieved_docs)
 
-    # Create the RAG chain with history awareness
-    rag_chain = (
-        {
-            "context": lambda x: get_contextualized_retrieval(x),
-            "input": lambda x: x["input"],
-            "chat_history": lambda x: x.get("chat_history", []),
-        }
-        | qa_prompt
-        | llm
-        | StrOutputParser()
-    )
+    # Create the RAG chain
+    def process_query(input_data):
+        """Process query through retrieval and LLM with appropriate formatting."""
+        # Get context (this also sets _is_list_query flag)
+        context = get_contextualized_retrieval(input_data)
+        is_list_query = input_data.get("_is_list_query", False)
+
+        # Create prompt based on query type
+        qa_system_prompt = create_qa_system_prompt(is_list_query=is_list_query)
+        qa_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", qa_system_prompt),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
+        )
+
+        # Invoke the chain
+        chain = qa_prompt | llm | StrOutputParser()
+        result = chain.invoke({
+            "context": context,
+            "input": input_data["input"],
+            "chat_history": input_data.get("chat_history", [])
+        })
+
+        return result
+
+    rag_chain = process_query
 
     print("✓ RAG chain initialized successfully")
     return rag_chain
@@ -276,7 +309,7 @@ def chat():
             }), 503
 
         # Process the user's query through the retrieval chain with chat history
-        result = rag_chain.invoke({
+        result = rag_chain({
             "input": message,
             "chat_history": chat_history
         })
