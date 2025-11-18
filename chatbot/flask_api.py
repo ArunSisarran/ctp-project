@@ -261,7 +261,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Get port from environment variable or use default
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5050))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
     print(f"\nStarting Flask API server on port {port}")

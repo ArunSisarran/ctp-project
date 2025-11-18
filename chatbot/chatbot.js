@@ -1,5 +1,5 @@
 // Chatbot functionality
-const API_URL = "http://localhost:5000/api/chat";
+const CHAT_API_URL = "http://localhost:5050/api/chat";
 
 function toggleChat() {
   const modal = document.getElementById("chatModal");
@@ -46,7 +46,7 @@ async function checkApiConnection() {
   if (!statusElement || !statusText) return;
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(CHAT_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -91,7 +91,7 @@ async function sendMessage() {
   showLoading();
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(CHAT_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function sendMessage() {
     hideLoading();
     addErrorMessage(
       "Failed to connect to the chatbot API. Make sure the Flask server is running on " +
-        API_URL
+        CHAT_API_URL
     );
 
     // Update status

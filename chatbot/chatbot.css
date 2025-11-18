@@ -203,7 +203,7 @@
 .message {
   display: flex;
   flex-direction: column;
-  max-width: 75%;
+  max-width: 90%;
   animation: fadeIn 0.3s;
 }
 
