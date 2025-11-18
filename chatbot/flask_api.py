@@ -16,6 +16,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.documents import Document
 from langchain_groq import ChatGroq
 
 # Add parent directory to path for imports
@@ -41,6 +42,7 @@ persistent_directory = os.path.join(db_dir, "chroma_db_research")
 # Global variables for RAG components
 rag_chain = None
 chat_history = []  # Simple global conversation history for basic implementation
+vector_db = None  # Global reference to vector database
 
 
 def initialize_rag_chain():
@@ -81,10 +83,15 @@ def initialize_rag_chain():
     db = Chroma(persist_directory=persistent_directory, embedding_function=embeddings)
     print("✓ Vector store loaded successfully\n")
 
+    # Store db reference globally for direct access
+    global vector_db
+    vector_db = db
+
     # Create a retriever for querying the vector store
+    # Increased k to 100 to ensure all documents can be retrieved
     retriever = db.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 20},
+        search_kwargs={"k": 100},
         filter={"category": "Physical Sciences"}
     )
 
@@ -172,9 +179,49 @@ def initialize_rag_chain():
         else:
             reformulated_query = query
 
-        filter_metadata = {"category": "Physical Sciences"}
-        # Retrieve documents using the (possibly reformulated) query
-        retrieved_docs = retriever.invoke(reformulated_query, filter=filter_metadata)
+        # Check if this is a "list all" query - if so, retrieve all documents of that type
+        query_lower = reformulated_query.lower()
+        is_list_all_query = any(phrase in query_lower for phrase in [
+            "list all", "all fields", "all subfields", "all topics",
+            "all funders", "show all", "what are all", "every field",
+            "every subfield", "every topic", "count of", "how many"
+        ])
+
+        if is_list_all_query:
+            # Determine document type from query
+            doc_type = None
+            if "field" in query_lower and "subfield" not in query_lower:
+                doc_type = "field"
+            elif "subfield" in query_lower:
+                doc_type = "subfield"
+            elif "topic" in query_lower:
+                doc_type = "topic"
+            elif "funder" in query_lower:
+                doc_type = "funder"
+
+            # If we can identify a specific type, retrieve all documents of that type
+            if doc_type:
+                filter_metadata = {"category": "Physical Sciences", "type": doc_type}
+                # Use get() method to retrieve all documents matching the filter
+                all_docs = vector_db.get(where=filter_metadata)
+                # Convert to Document objects
+                retrieved_docs = []
+                if all_docs and "documents" in all_docs:
+                    for i, doc_content in enumerate(all_docs["documents"]):
+                        metadata = {}
+                        if "metadatas" in all_docs and i < len(all_docs["metadatas"]):
+                            metadata = all_docs["metadatas"][i]
+                        retrieved_docs.append(Document(page_content=doc_content, metadata=metadata))
+                print(f"Retrieved all {len(retrieved_docs)} {doc_type} documents")
+            else:
+                # Fallback to similarity search with high k
+                retrieved_docs = retriever.invoke(reformulated_query)
+                print(f"Retrieved {len(retrieved_docs)} documents (similarity search)")
+        else:
+            # Regular similarity search (filter already configured in retriever)
+            retrieved_docs = retriever.invoke(reformulated_query)
+            print(f"Retrieved {len(retrieved_docs)} documents (similarity search)")
+
         return format_docs(retrieved_docs)
 
     # Create the RAG chain with history awareness
