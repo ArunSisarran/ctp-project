@@ -2,15 +2,55 @@ import * as THREE from 'three';
 
 // Scene setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0e27);
+scene.background = new THREE.Color(0x000000);
+
+// Create starfield
+function createStarfield() {
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 10000;
+    const positions = new Float32Array(starCount * 3);
+    const colors = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
+    
+    for (let i = 0; i < starCount; i++) {
+        const i3 = i * 3;
+        const radius = 500;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(Math.random() * 2 - 1);
+        
+        positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i3 + 2] = radius * Math.cos(phi);
+        
+        const colorVariation = 0.7 + Math.random() * 0.3;
+        colors[i3] = colorVariation;
+        colors[i3 + 1] = colorVariation;
+        colors[i3 + 2] = 0.8 + Math.random() * 0.2;
+        
+        sizes[i] = Math.random() * 2;
+    }
+    
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    starGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    
+    const starMaterial = new THREE.PointsMaterial({
+        size: 1.5,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true
+    });
+    
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    scene.add(stars);
+    return stars;
+}
+
+const starfield = createStarfield();
 
 // Camera
-const camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 4;
 
 // Renderer
@@ -23,12 +63,12 @@ document.getElementById('canvas-container').appendChild(renderer.domElement);
 const radius = 2;
 const segments = 64;
 
-// Create transparent globe
+// Create transparent globe (ocean)
 const globeGeometry = new THREE.SphereGeometry(radius, segments, segments);
 const globeMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+    color: 0x1a3a52,
     transparent: true,
-    opacity: 0.1,
+    opacity: 0.6,
     wireframe: false,
     side: THREE.DoubleSide
 });
@@ -36,7 +76,7 @@ const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
 
 // Create atmosphere glow
-const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.15, segments, segments);
+const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.18, segments, segments);
 const atmosphereMaterial = new THREE.ShaderMaterial({
     vertexShader: `
         varying vec3 vNormal;
@@ -48,61 +88,40 @@ const atmosphereMaterial = new THREE.ShaderMaterial({
     fragmentShader: `
         varying vec3 vNormal;
         void main() {
-            float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+            float intensity = pow(0.7 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
             gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity;
         }
     `,
     side: THREE.BackSide,
     blending: THREE.AdditiveBlending,
-    transparent: true
+    transparent: true,
+    depthWrite: false
 });
 const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-atmosphere.visible = false;
+atmosphere.visible = true;
 scene.add(atmosphere);
 
-// Create inner glow
-const glowGeometry = new THREE.SphereGeometry(radius * 1.05, segments, segments);
-const glowMaterial = new THREE.ShaderMaterial({
-    vertexShader: `
-        varying vec3 vNormal;
-        void main() {
-            vNormal = normalize(normalMatrix * normal);
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        varying vec3 vNormal;
-        void main() {
-            float intensity = pow(0.8 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 3.0);
-            gl_FragColor = vec4(0.4, 1.0, 0.8, 1.0) * intensity;
-        }
-    `,
-    side: THREE.FrontSide,
-    blending: THREE.AdditiveBlending,
-    transparent: true
-});
-const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-glow.visible = false;
-scene.add(glow);
+// Groups
+const countryFillsGroup = new THREE.Group();
+scene.add(countryFillsGroup);
 
-// Borders group
 const bordersGroup = new THREE.Group();
 scene.add(bordersGroup);
 
-// Markers group
 const markersGroup = new THREE.Group();
 scene.add(markersGroup);
 
-// Connections group
 const connectionsGroup = new THREE.Group();
 scene.add(connectionsGroup);
 
 // Storage
 const borderLines = [];
+const countryMeshes = [];
 const markers = [];
 const connections = [];
 let countryData = new Map();
 let selectedCountry = null;
+let hoveredCountry = null;
 
 // Border colors
 const borderColors = [
@@ -113,12 +132,10 @@ const borderColors = [
 // State
 let state = {
     autoRotate: true,
-    rotationSpeed: 0.001,
+    rotationSpeed: 0.0001,
     showMarkers: false,
     showConnections: false,
-    showGlow: false,
-    showAtmosphere: false,
-    zoom: 1,
+    showAtmosphere: true,
     isDragging: false,
     previousMousePosition: { x: 0, y: 0 },
     mouseDownPosition: { x: 0, y: 0 }
@@ -162,6 +179,29 @@ function createBorderKey(points) {
     return key;
 }
 
+// Convert coordinates to country shape
+function createCountryShape(coordinates, geometryType) {
+    const shapes = [];
+    
+    const processRing = (ring) => {
+        if (ring.length < 3) return null;
+        const vertices = ring.map(([lon, lat]) => latLonToVector3(lat, lon, radius * 1.001));
+        return vertices;
+    };
+    
+    if (geometryType === 'Polygon') {
+        const vertices = processRing(coordinates[0]);
+        if (vertices && vertices.length >= 3) shapes.push(vertices);
+    } else if (geometryType === 'MultiPolygon') {
+        coordinates.forEach(polygon => {
+            const vertices = processRing(polygon[0]);
+            if (vertices && vertices.length >= 3) shapes.push(vertices);
+        });
+    }
+    
+    return shapes;
+}
+
 // Load country borders
 async function loadCountryBorders() {
     try {
@@ -186,18 +226,17 @@ async function loadCountryBorders() {
                 const colorIndex = getCountryColorIndex(normalized);
                 countryColorMap.set(normalized, borderColors[colorIndex % borderColors.length]);
                 
-                // Store country data
                 countryData.set(normalized, {
                     name: feature.properties?.NAME || feature.properties?.name || countryId,
                     code: feature.properties?.ISO_A3 || feature.properties?.ISO_A2 || '',
                     region: feature.properties?.REGION_UN || feature.properties?.SUBREGION || 'Unknown',
-                    population: Math.floor(Math.random() * 100000000), // Mock data
-                    gdp: Math.floor(Math.random() * 1000000000000) // Mock data
+                    population: Math.floor(Math.random() * 100000000),
+                    gdp: Math.floor(Math.random() * 1000000000000)
                 });
             }
         });
         
-        // Create borders
+        // Create filled meshes and borders
         geoData.features.forEach((feature) => {
             const geometryType = feature.geometry.type;
             const coordinates = feature.geometry.coordinates;
@@ -205,28 +244,66 @@ async function loadCountryBorders() {
             const normalized = normalizeCountryName(countryId);
             const color = countryColorMap.get(normalized) || borderColors[0];
             
+            // Create filled polygon meshes
+            const shapes = createCountryShape(coordinates, geometryType);
+            shapes.forEach(vertices => {
+                if (vertices.length < 3) return;
+                
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(vertices.length * 3);
+                
+                vertices.forEach((v, i) => {
+                    positions[i * 3] = v.x;
+                    positions[i * 3 + 1] = v.y;
+                    positions[i * 3 + 2] = v.z;
+                });
+                
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                
+                const indices = [];
+                for (let i = 1; i < vertices.length - 1; i++) {
+                    indices.push(0, i, i + 1);
+                }
+                geometry.setIndex(indices);
+                geometry.computeVertexNormals();
+                
+                const material = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.0,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.userData = {
+                    country: normalized,
+                    countryName: countryData.get(normalized)?.name,
+                    baseColor: color,
+                    isCountryMesh: true
+                };
+                
+                countryFillsGroup.add(mesh);
+                countryMeshes.push({ mesh, country: normalized, baseColor: color });
+            });
+            
+            // Create border lines
             const processRing = (ring) => {
-                const points = ring.map(([lon, lat]) => 
-                    latLonToVector3(lat, lon, radius * 1.002)
-                );
+                const points = ring.map(([lon, lat]) => latLonToVector3(lat, lon, radius * 1.002));
                 
                 const borderKey = createBorderKey(points);
                 const reverseKey = createBorderKey([...points].reverse());
                 
-                if (borderKey && (drawnBorders.has(borderKey) || drawnBorders.has(reverseKey))) {
-                    return;
-                }
-                
-                if (borderKey) {
-                    drawnBorders.set(borderKey, true);
-                }
+                if (borderKey && (drawnBorders.has(borderKey) || drawnBorders.has(reverseKey))) return;
+                if (borderKey) drawnBorders.set(borderKey, true);
                 
                 const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
                 const lineMaterial = new THREE.LineBasicMaterial({
                     color: color,
                     linewidth: 1,
                     transparent: true,
-                    opacity: 0.9,
+                    opacity: 0.7,
                     depthTest: false,
                     depthWrite: false
                 });
@@ -235,20 +312,14 @@ async function loadCountryBorders() {
                 bordersGroup.add(line);
                 
                 borderLines.push({
-                    line: line,
-                    originalPoints: points,
-                    baseColor: color,
-                    baseOpacity: 0.9,
-                    country: normalized
+                    line, originalPoints: points, baseColor: color, baseOpacity: 0.7, country: normalized
                 });
             };
             
             if (geometryType === 'Polygon') {
                 coordinates.forEach(ring => processRing(ring));
             } else if (geometryType === 'MultiPolygon') {
-                coordinates.forEach(polygon => {
-                    polygon.forEach(ring => processRing(ring));
-                });
+                coordinates.forEach(polygon => polygon.forEach(ring => processRing(ring)));
             }
         });
         
@@ -261,33 +332,25 @@ async function loadCountryBorders() {
 }
 
 // Create marker
-function createMarker(lat, lon, label, color = 0x64ffda) {
+function createMarker(lat, lon, label, color = 0xff8c42) {
     const position = latLonToVector3(lat, lon, radius * 1.05);
     
-    // Marker sphere
     const markerGeometry = new THREE.SphereGeometry(0.03, 16, 16);
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: color });
+    const markerMaterial = new THREE.MeshBasicMaterial({ color });
     const marker = new THREE.Mesh(markerGeometry, markerMaterial);
     marker.position.copy(position);
     
-    // Glow effect
     const glowGeometry = new THREE.SphereGeometry(0.05, 16, 16);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.3
-    });
+    const glowMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3 });
     const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
     glowMesh.position.copy(position);
     
-    marker.userData = { label: label, lat: lat, lon: lon };
-    glowMesh.userData = { label: label, lat: lat, lon: lon };
+    marker.userData = { label, lat, lon, isMarker: true };
+    glowMesh.userData = { label, lat, lon, isMarker: true };
     
     markersGroup.add(marker);
     markersGroup.add(glowMesh);
-    
     markers.push({ marker, glow: glowMesh, label, lat, lon });
-    
     updateMarkerCount();
     return marker;
 }
@@ -296,32 +359,22 @@ function createMarker(lat, lon, label, color = 0x64ffda) {
 function createConnection(lat1, lon1, lat2, lon2, color = 0xff6b6b) {
     const start = latLonToVector3(lat1, lon1, radius * 1.02);
     const end = latLonToVector3(lat2, lon2, radius * 1.02);
-    
     const distance = start.distanceTo(end);
     const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
     mid.normalize().multiplyScalar(radius * 1.02 + distance * 0.3);
     
     const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
     const points = curve.getPoints(50);
-    
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.6,
-        linewidth: 2
-    });
-    
+    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6, linewidth: 2 });
     const line = new THREE.Line(geometry, material);
     connectionsGroup.add(line);
     connections.push(line);
-    
     return line;
 }
 
-// Add some sample markers and connections
+// Add sample data
 function addSampleData() {
-    // Major cities
     const cities = [
         { lat: 40.7128, lon: -74.0060, label: 'New York' },
         { lat: 51.5074, lon: -0.1278, label: 'London' },
@@ -331,11 +384,8 @@ function addSampleData() {
         { lat: 55.7558, lon: 37.6173, label: 'Moscow' }
     ];
     
-    cities.forEach(city => {
-        createMarker(city.lat, city.lon, city.label);
-    });
+    cities.forEach(city => createMarker(city.lat, city.lon, city.label));
     
-    // Create connections between cities
     for (let i = 0; i < cities.length - 1; i++) {
         const city1 = cities[i];
         const city2 = cities[i + 1];
@@ -363,33 +413,60 @@ function onMouseMove(event) {
         const deltaX = event.clientX - state.previousMousePosition.x;
         const deltaY = event.clientY - state.previousMousePosition.y;
         
-        globe.rotation.y += deltaX * 0.01;
-        bordersGroup.rotation.y += deltaX * 0.01;
-        markersGroup.rotation.y += deltaX * 0.01;
-        connectionsGroup.rotation.y += deltaX * 0.01;
-        atmosphere.rotation.y += deltaX * 0.01;
-        glow.rotation.y += deltaX * 0.01;
-        
-        globe.rotation.x += deltaY * 0.01;
-        bordersGroup.rotation.x += deltaY * 0.01;
-        markersGroup.rotation.x += deltaY * 0.01;
-        connectionsGroup.rotation.x += deltaY * 0.01;
-        atmosphere.rotation.x += deltaY * 0.01;
-        glow.rotation.x += deltaY * 0.01;
+        [globe, countryFillsGroup, bordersGroup, markersGroup, connectionsGroup, atmosphere, starfield].forEach(obj => {
+            obj.rotation.y += deltaX * 0.01;
+            obj.rotation.x += deltaY * 0.01;
+        });
         
         state.previousMousePosition = { x: event.clientX, y: event.clientY };
         renderer.domElement.style.cursor = 'grabbing';
         return;
     }
     
-    // Tooltip for markers
+    // Raycast for hover
     raycaster.setFromCamera(mouse, camera);
-    const markerIntersects = raycaster.intersectObjects(markersGroup.children);
     
+    // Check markers
+    const markerIntersects = raycaster.intersectObjects(markersGroup.children);
     if (markerIntersects.length > 0) {
         const marker = markerIntersects[0].object;
-        if (marker.userData.label) {
-            tooltip.textContent = marker.userData.label;
+        if (marker.userData.isMarker && marker.userData.label) {
+            // Show detailed info for research data markers
+            if (marker.userData.isResearchData) {
+                const type = marker.userData.type.charAt(0).toUpperCase() + marker.userData.type.slice(1);
+                const works = marker.userData.works.toLocaleString();
+                tooltip.textContent = `${marker.userData.label} (${type}: ${works} works)`;
+            } else {
+                tooltip.textContent = marker.userData.label;
+            }
+            tooltip.style.display = 'block';
+            tooltip.style.left = event.clientX + 10 + 'px';
+            tooltip.style.top = event.clientY + 10 + 'px';
+            renderer.domElement.style.cursor = 'pointer';
+
+            if (hoveredCountry) {
+                unhighlightCountry(hoveredCountry);
+                hoveredCountry = null;
+            }
+            return;
+        }
+    }
+    
+    // Check countries
+    const fillIntersects = raycaster.intersectObjects(countryFillsGroup.children);
+    if (fillIntersects.length > 0) {
+        const countryMesh = fillIntersects[0].object;
+        if (countryMesh.userData.isCountryMesh) {
+            const countryId = countryMesh.userData.country;
+            const countryName = countryMesh.userData.countryName;
+            
+            if (hoveredCountry !== countryId) {
+                if (hoveredCountry) unhighlightCountry(hoveredCountry);
+                hoveredCountry = countryId;
+                highlightCountryHover(countryId);
+            }
+            
+            tooltip.textContent = countryName || countryId;
             tooltip.style.display = 'block';
             tooltip.style.left = event.clientX + 10 + 'px';
             tooltip.style.top = event.clientY + 10 + 'px';
@@ -398,18 +475,10 @@ function onMouseMove(event) {
         }
     }
     
-    // Tooltip for borders
-    const borderIntersects = raycaster.intersectObjects(bordersGroup.children);
-    if (borderIntersects.length > 0) {
-        const border = borderIntersects[0].object;
-        if (border.userData.countryName) {
-            tooltip.textContent = border.userData.countryName;
-            tooltip.style.display = 'block';
-            tooltip.style.left = event.clientX + 10 + 'px';
-            tooltip.style.top = event.clientY + 10 + 'px';
-            renderer.domElement.style.cursor = 'pointer';
-            return;
-        }
+    // Over ocean
+    if (hoveredCountry) {
+        unhighlightCountry(hoveredCountry);
+        hoveredCountry = null;
     }
     
     const globeIntersects = raycaster.intersectObject(globe);
@@ -418,47 +487,42 @@ function onMouseMove(event) {
     } else {
         renderer.domElement.style.cursor = 'default';
     }
-    
     tooltip.style.display = 'none';
 }
 
 function onMouseUp(event) {
     if (state.isDragging) {
-        // Check if this was a click (minimal movement) or a drag
         const dragDistance = Math.sqrt(
             Math.pow(event.clientX - state.mouseDownPosition.x, 2) +
             Math.pow(event.clientY - state.mouseDownPosition.y, 2)
         );
         
-        // If movement was less than 5 pixels, treat it as a click
         if (dragDistance < 5) {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
             raycaster.setFromCamera(mouse, camera);
             
-            // Check for marker clicks
+            // Check markers (they show info in tooltip, not in panel)
             const markerIntersects = raycaster.intersectObjects(markersGroup.children);
             if (markerIntersects.length > 0) {
                 const marker = markerIntersects[0].object;
-                if (marker.userData.label) {
-                    showInfo(marker.userData.label, `Lat: ${marker.userData.lat.toFixed(2)}, Lon: ${marker.userData.lon.toFixed(2)}`);
+                if (marker.userData.isMarker && marker.userData.label) {
+                    // Markers show their info via tooltip on hover
                     state.isDragging = false;
                     renderer.domElement.style.cursor = 'default';
                     return;
                 }
             }
             
-            // Check for border clicks - use world space raycasting
-            const borderIntersects = raycaster.intersectObjects(bordersGroup.children, true);
-            if (borderIntersects.length > 0) {
-                const border = borderIntersects[0].object;
-                if (border.userData.country) {
-                    highlightCountry(border.userData.country);
-                    const data = countryData.get(border.userData.country);
-                    if (data) {
-                        showCountryInfo(data);
-                    }
+            // Check countries
+            const fillIntersects = raycaster.intersectObjects(countryFillsGroup.children);
+            if (fillIntersects.length > 0) {
+                const countryMesh = fillIntersects[0].object;
+                if (countryMesh.userData.isCountryMesh) {
+                    const countryId = countryMesh.userData.country;
+                    selectCountry(countryId);
+                    const data = countryData.get(countryId);
+                    if (data) showCountryInfo(data);
                 }
             }
         }
@@ -468,39 +532,71 @@ function onMouseUp(event) {
     renderer.domElement.style.cursor = 'default';
 }
 
-// UI Functions
-function showInfo(title, content) {
-    document.getElementById('country-name').textContent = title;
-    document.getElementById('country-code').textContent = '';
-    document.getElementById('country-region').textContent = '';
-    document.getElementById('country-data').textContent = content;
-    infoPanel.classList.add('visible');
+// Mouse wheel zoom
+function onMouseWheel(event) {
+    event.preventDefault();
+    
+    const zoomSpeed = 0.1;
+    const delta = event.deltaY > 0 ? 1 : -1;
+    
+    camera.position.z += delta * zoomSpeed;
+    camera.position.z = Math.max(2, Math.min(10, camera.position.z));
 }
 
+// UI Functions
 function showCountryInfo(data) {
     document.getElementById('country-name').textContent = data.name;
-    document.getElementById('country-code').textContent = `Code: ${data.code}`;
-    document.getElementById('country-region').textContent = `Region: ${data.region}`;
-    document.getElementById('country-data').textContent = 
-        `Population: ${(data.population / 1000000).toFixed(1)}M | GDP: $${(data.gdp / 1000000000).toFixed(1)}B`;
     infoPanel.classList.add('visible');
 }
 
-function highlightCountry(countryId) {
-    // Reset previous highlight
+function highlightCountryHover(countryId) {
+    // Only highlight borders on hover, keep mesh invisible
     borderLines.forEach(bl => {
-        bl.line.material.opacity = bl.baseOpacity;
-        bl.line.material.color.setHex(bl.baseColor);
+        if (bl.country === countryId) bl.line.material.opacity = 1.0;
     });
-    
-    // Highlight selected country
+}
+
+function unhighlightCountry(countryId) {
+    if (selectedCountry === countryId) return;
+
+    countryMeshes.forEach(cm => {
+        if (cm.country === countryId) cm.mesh.material.opacity = 0.0;
+    });
+    borderLines.forEach(bl => {
+        if (bl.country === countryId) bl.line.material.opacity = bl.baseOpacity;
+    });
+}
+
+function selectCountry(countryId) {
+    // Reset previous selection
+    if (selectedCountry) {
+        countryMeshes.forEach(cm => {
+            if (cm.country === selectedCountry) cm.mesh.material.opacity = 0.0;
+        });
+        borderLines.forEach(bl => {
+            if (bl.country === selectedCountry) {
+                bl.line.material.opacity = bl.baseOpacity;
+                bl.line.material.color.setHex(bl.baseColor);
+            }
+        });
+    }
+
+    // Highlight selected country - only borders, no fill
+    // Keep mesh invisible to avoid showing triangulation edges
+    countryMeshes.forEach(cm => {
+        if (cm.country === countryId) {
+            cm.mesh.material.opacity = 0.0; // Keep invisible
+        }
+    });
+
+    // Highlight borders in white with full opacity
     borderLines.forEach(bl => {
         if (bl.country === countryId) {
             bl.line.material.opacity = 1.0;
             bl.line.material.color.setHex(0xffffff);
         }
     });
-    
+
     selectedCountry = countryId;
 }
 
@@ -508,7 +604,7 @@ function updateMarkerCount() {
     document.getElementById('marker-count').textContent = markers.length;
 }
 
-// Search functionality
+// Search
 function setupSearch() {
     const searchInput = document.getElementById('country-search');
     const searchResults = document.getElementById('search-results');
@@ -523,9 +619,7 @@ function setupSearch() {
         
         const matches = Array.from(countryData.entries())
             .filter(([key, data]) => 
-                data.name.toLowerCase().includes(query) || 
-                data.code.toLowerCase().includes(query)
-            )
+                data.name.toLowerCase().includes(query) || data.code.toLowerCase().includes(query))
             .slice(0, 10);
         
         if (matches.length === 0) {
@@ -536,25 +630,20 @@ function setupSearch() {
         searchResults.innerHTML = matches.map(([key, data]) => 
             `<div class="search-result-item" data-country="${key}">${data.name} (${data.code})</div>`
         ).join('');
-        
         searchResults.style.display = 'block';
         
-        // Add click handlers
         searchResults.querySelectorAll('.search-result-item').forEach(item => {
             item.addEventListener('click', () => {
                 const countryId = item.dataset.country;
-                highlightCountry(countryId);
+                selectCountry(countryId);
                 const data = countryData.get(countryId);
-                if (data) {
-                    showCountryInfo(data);
-                }
+                if (data) showCountryInfo(data);
                 searchResults.style.display = 'none';
                 searchInput.value = '';
             });
         });
     });
     
-    // Close search results when clicking outside
     document.addEventListener('click', (e) => {
         if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
             searchResults.style.display = 'none';
@@ -562,7 +651,385 @@ function setupSearch() {
     });
 }
 
-// Control panel setup
+// ============ RESEARCH DATA API INTEGRATION ============
+
+// API Configuration
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// Research data state
+let researchData = {
+    fields: [],
+    selectedField: null,
+    selectedSubfield: null,
+    selectedFunder: null,
+    showResearchData: false,
+    markers: []
+};
+
+// API Functions with cascading logic
+async function fetchFields() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/fields`);
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('Error fetching fields:', error);
+        return [];
+    }
+}
+
+async function fetchSubfields(fieldId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/subfields?field_id=${fieldId}`);
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('Error fetching subfields:', error);
+        return [];
+    }
+}
+
+async function fetchFunders(subfieldId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/funders?subfield_id=${subfieldId}`);
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('Error fetching funders:', error);
+        return [];
+    }
+}
+
+async function fetchTopics(funderId, subfieldId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/topics?funder_id=${funderId}&subfield_id=${subfieldId}`);
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('Error fetching topics:', error);
+        return [];
+    }
+}
+
+async function fetchResearchData(filters) {
+    try {
+        const params = new URLSearchParams();
+        if (filters.field_id) params.append('field_id', filters.field_id);
+        if (filters.subfield_id) params.append('subfield_id', filters.subfield_id);
+        if (filters.funder_id) params.append('funder_id', filters.funder_id);
+        if (filters.topic_id) params.append('topic_id', filters.topic_id);
+
+        const response = await fetch(`${API_BASE_URL}/research_data?${params.toString()}`);
+        const data = await response.json();
+        return data.data || [];
+    } catch (error) {
+        console.error('Error fetching research data:', error);
+        return [];
+    }
+}
+
+// Initialize field dropdown
+async function initializeFieldDropdown() {
+    const fieldSelect = document.getElementById('field-filter');
+    fieldSelect.innerHTML = '<option value="">Choose Field</option>';
+
+    const fields = await fetchFields();
+    researchData.fields = fields;
+
+    fields.forEach(field => {
+        const option = document.createElement('option');
+        option.value = field.id;
+        option.textContent = `${field.name} (${field.total_funders} funders)`;
+        fieldSelect.appendChild(option);
+    });
+}
+
+// Populate subfield dropdown based on selected field
+async function populateSubfieldDropdown(fieldId) {
+    const subfieldSelect = document.getElementById('subfield-filter');
+    subfieldSelect.innerHTML = '<option value="">Choose Subfield</option>';
+
+    if (!fieldId) {
+        subfieldSelect.disabled = true;
+        return;
+    }
+
+    subfieldSelect.disabled = false;
+    const subfields = await fetchSubfields(fieldId);
+
+    subfields.forEach(subfield => {
+        const option = document.createElement('option');
+        option.value = subfield.id;
+        option.textContent = `${subfield.name} (${subfield.total_funders} funders)`;
+        subfieldSelect.appendChild(option);
+    });
+}
+
+// Populate funder dropdown based on selected subfield
+async function populateFunderDropdown(subfieldId) {
+    const funderSelect = document.getElementById('funder-filter');
+    funderSelect.innerHTML = '<option value="">Choose Funder</option>';
+
+    if (!subfieldId) {
+        funderSelect.disabled = true;
+        return;
+    }
+
+    funderSelect.disabled = false;
+    const funders = await fetchFunders(subfieldId);
+
+    funders.forEach(funder => {
+        const option = document.createElement('option');
+        option.value = funder.id;
+        option.textContent = `${funder.name} (${funder.works_count} works)`;
+        funderSelect.appendChild(option);
+    });
+}
+
+// Populate topic dropdown based on selected funder
+async function populateTopicDropdown(funderId, subfieldId) {
+    const topicSelect = document.getElementById('topic-filter');
+    topicSelect.innerHTML = '<option value="">Choose Topic</option>';
+
+    if (!funderId || !subfieldId) {
+        topicSelect.disabled = true;
+        return;
+    }
+
+    topicSelect.disabled = false;
+    const topics = await fetchTopics(funderId, subfieldId);
+
+    topics.forEach(topic => {
+        const option = document.createElement('option');
+        option.value = topic.topic_id;
+        option.textContent = `${topic.topic_name} (${topic.topic_works_count} works)`;
+        topicSelect.appendChild(option);
+    });
+}
+
+// Generate random coordinates within USA bounds
+function getRandomUSACoordinates() {
+    // USA approximate bounds
+    const latMin = 25;
+    const latMax = 50;
+    const lonMin = -125;
+    const lonMax = -65;
+
+    const lat = latMin + Math.random() * (latMax - latMin);
+    const lon = lonMin + Math.random() * (lonMax - lonMin);
+
+    return { lat, lon };
+}
+
+// Visualize research data on the globe
+async function visualizeResearchData() {
+    // Clear existing research markers first
+    clearResearchMarkers();
+
+    // Get current filter values
+    const filters = {
+        field_id: researchData.selectedField,
+        subfield_id: researchData.selectedSubfield,
+        funder_id: researchData.selectedFunder,
+        topic_id: document.getElementById('topic-filter').value
+    };
+
+    // Fetch filtered data
+    const data = await fetchResearchData(filters);
+
+    if (!data || data.length === 0) {
+        console.log('No research data to visualize');
+        return;
+    }
+
+    console.log(`Visualizing ${data.length} research data points`);
+
+    // Create markers for each funder
+    data.forEach((item, index) => {
+        const coords = getRandomUSACoordinates();
+        const color = 0xff8c42; // Orange color for research markers
+
+        const position = latLonToVector3(coords.lat, coords.lon, radius * 1.05);
+
+        // Create marker
+        const markerGeometry = new THREE.SphereGeometry(0.03, 16, 16);
+        const markerMaterial = new THREE.MeshBasicMaterial({ color });
+        const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+        marker.position.copy(position);
+
+        // Create glow
+        const glowGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3 });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        glowMesh.position.copy(position);
+
+        // Store metadata
+        marker.userData = {
+            label: item.funder_name,
+            lat: coords.lat,
+            lon: coords.lon,
+            isMarker: true,
+            isResearchData: true,
+            type: 'funder',
+            works: item.funder_works_count,
+            data: item
+        };
+
+        glowMesh.userData = {
+            label: item.funder_name,
+            lat: coords.lat,
+            lon: coords.lon,
+            isMarker: true,
+            isResearchData: true,
+            type: 'funder',
+            works: item.funder_works_count,
+            data: item
+        };
+
+        markersGroup.add(marker);
+        markersGroup.add(glowMesh);
+
+        researchData.markers.push({ marker, glow: glowMesh, data: item });
+        markers.push({ marker, glow: glowMesh, label: item.funder_name, lat: coords.lat, lon: coords.lon });
+    });
+
+    updateMarkerCount();
+
+    // Make markers visible
+    markersGroup.visible = true;
+    state.showMarkers = true;
+    document.getElementById('toggle-markers').classList.add('active');
+}
+
+// Clear research data markers
+function clearResearchMarkers() {
+    researchData.markers.forEach(markerData => {
+        markersGroup.remove(markerData.marker);
+        markersGroup.remove(markerData.glow);
+
+        // Also remove from global markers array
+        const index = markers.findIndex(m => m.marker === markerData.marker);
+        if (index > -1) {
+            markers.splice(index, 1);
+        }
+    });
+    researchData.markers = [];
+    updateMarkerCount();
+}
+
+// Setup research data controls with cascading filters
+function setupResearchDataControls() {
+    const fieldSelect = document.getElementById('field-filter');
+    const subfieldSelect = document.getElementById('subfield-filter');
+    const funderSelect = document.getElementById('funder-filter');
+    const topicSelect = document.getElementById('topic-filter');
+
+    // Initialize
+    initializeFieldDropdown();
+
+    // Set initial states
+    subfieldSelect.innerHTML = '<option value="">Choose Subfield</option>';
+    subfieldSelect.disabled = true;
+    funderSelect.innerHTML = '<option value="">Choose Funder</option>';
+    funderSelect.disabled = true;
+    topicSelect.innerHTML = '<option value="">Choose Topic</option>';
+    topicSelect.disabled = true;
+
+    // Field change event
+    fieldSelect.addEventListener('change', async (e) => {
+        const fieldId = e.target.value;
+        researchData.selectedField = fieldId;
+
+        // Reset downstream selections
+        researchData.selectedSubfield = null;
+        researchData.selectedFunder = null;
+        funderSelect.innerHTML = '<option value="">Choose Funder</option>';
+        funderSelect.disabled = true;
+        topicSelect.innerHTML = '<option value="">Choose Topic</option>';
+        topicSelect.disabled = true;
+
+        if (fieldId) {
+            await populateSubfieldDropdown(fieldId);
+        } else {
+            subfieldSelect.innerHTML = '<option value="">Choose Subfield</option>';
+            subfieldSelect.disabled = true;
+        }
+    });
+
+    // Subfield change event
+    subfieldSelect.addEventListener('change', async (e) => {
+        const subfieldId = e.target.value;
+        researchData.selectedSubfield = subfieldId;
+
+        // Reset downstream selections
+        researchData.selectedFunder = null;
+        topicSelect.innerHTML = '<option value="">Choose Topic</option>';
+        topicSelect.disabled = true;
+
+        if (subfieldId) {
+            await populateFunderDropdown(subfieldId);
+        } else {
+            funderSelect.innerHTML = '<option value="">Choose Funder</option>';
+            funderSelect.disabled = true;
+        }
+    });
+
+    // Funder change event
+    funderSelect.addEventListener('change', async (e) => {
+        const funderId = e.target.value;
+        researchData.selectedFunder = funderId;
+
+        if (funderId && researchData.selectedSubfield) {
+            await populateTopicDropdown(funderId, researchData.selectedSubfield);
+        } else {
+            topicSelect.innerHTML = '<option value="">Choose Topic</option>';
+            topicSelect.disabled = true;
+        }
+    });
+
+    // Apply and clear buttons functionality
+    const applyBtn = document.getElementById('apply-filters');
+    const clearBtn = document.getElementById('clear-filters');
+
+    applyBtn.addEventListener('click', async () => {
+        console.log('Filters applied:', {
+            field: researchData.selectedField,
+            subfield: researchData.selectedSubfield,
+            funder: researchData.selectedFunder,
+            topic: topicSelect.value
+        });
+
+        // Visualize research data with current filters
+        await visualizeResearchData();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        fieldSelect.value = '';
+        subfieldSelect.innerHTML = '<option value="">Choose Subfield</option>';
+        subfieldSelect.disabled = true;
+        funderSelect.innerHTML = '<option value="">Choose Funder</option>';
+        funderSelect.disabled = true;
+        topicSelect.innerHTML = '<option value="">Choose Topic</option>';
+        topicSelect.disabled = true;
+
+        researchData.selectedField = null;
+        researchData.selectedSubfield = null;
+        researchData.selectedFunder = null;
+
+        // Clear research markers from globe
+        clearResearchMarkers();
+    });
+
+    // Remove toggle research data button functionality
+    const toggleBtn = document.getElementById('toggle-research-data');
+    if (toggleBtn) {
+        toggleBtn.style.display = 'none';  // Hide for now
+    }
+}
+
+// ============ END RESEARCH DATA API INTEGRATION ============
+
+// Controls
 function setupControls() {
     const speedSlider = document.getElementById('rotation-speed');
     const speedValue = document.getElementById('speed-value');
@@ -572,79 +1039,50 @@ function setupControls() {
         speedValue.textContent = speed.toFixed(1) + 'x';
     });
     
-    const zoomSlider = document.getElementById('zoom-level');
-    const zoomValue = document.getElementById('zoom-value');
-    zoomSlider.addEventListener('input', (e) => {
-        const zoom = parseFloat(e.target.value);
-        state.zoom = zoom;
-        camera.position.z = 4 / zoom;
-        zoomValue.textContent = zoom.toFixed(1) + 'x';
-    });
-    
     document.getElementById('toggle-rotation').addEventListener('click', (e) => {
         state.autoRotate = !state.autoRotate;
         e.target.classList.toggle('active');
     });
     
     document.getElementById('reset-view').addEventListener('click', () => {
-        globe.rotation.set(0, 0, 0);
-        bordersGroup.rotation.set(0, 0, 0);
-        markersGroup.rotation.set(0, 0, 0);
-        connectionsGroup.rotation.set(0, 0, 0);
-        atmosphere.rotation.set(0, 0, 0);
-        glow.rotation.set(0, 0, 0);
+        [globe, countryFillsGroup, bordersGroup, markersGroup, connectionsGroup, atmosphere, starfield].forEach(obj => {
+            obj.rotation.set(0, 0, 0);
+        });
         camera.position.z = 4;
-        state.zoom = 1;
-        zoomSlider.value = 1;
-        zoomValue.textContent = '1.0x';
     });
     
     document.getElementById('toggle-markers').addEventListener('click', (e) => {
         state.showMarkers = !state.showMarkers;
         markersGroup.visible = state.showMarkers;
         e.target.classList.toggle('active');
-        if (state.showMarkers && markers.length === 0) {
-            addSampleData();
-        }
+        if (state.showMarkers && markers.length === 0) addSampleData();
     });
     
     document.getElementById('toggle-connections').addEventListener('click', (e) => {
         state.showConnections = !state.showConnections;
         connectionsGroup.visible = state.showConnections;
         e.target.classList.toggle('active');
-        if (state.showConnections && connections.length === 0 && markers.length > 0) {
-            // Connections already created with markers
-        }
     });
-    
-    document.getElementById('toggle-glow').addEventListener('click', (e) => {
-        state.showGlow = !state.showGlow;
-        glow.visible = state.showGlow;
-        e.target.classList.toggle('active');
-    });
-    
+
     document.getElementById('toggle-atmosphere').addEventListener('click', (e) => {
         state.showAtmosphere = !state.showAtmosphere;
         atmosphere.visible = state.showAtmosphere;
         e.target.classList.toggle('active');
     });
-    
-    document.getElementById('add-marker').addEventListener('click', () => {
-        const lat = (Math.random() - 0.5) * 160;
-        const lon = (Math.random() - 0.5) * 360;
-        const colors = [0x64ffda, 0xff6b6b, 0x4ecdc4, 0xf9ca24, 0x6c5ce7];
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        createMarker(lat, lon, `Marker ${markers.length + 1}`, color);
-        
-        if (!state.showMarkers) {
-            state.showMarkers = true;
-            markersGroup.visible = true;
-            document.getElementById('toggle-markers').classList.add('active');
-        }
-    });
-    
+
+    // Set atmosphere button as active by default
+    document.getElementById('toggle-atmosphere').classList.add('active');
+
     document.getElementById('close-info').addEventListener('click', () => {
         infoPanel.classList.remove('visible');
+    });
+    
+    // Toggle control panel visibility
+    const controlPanel = document.getElementById('control-panel');
+    const toggleBtn = document.getElementById('toggle-panel');
+    
+    toggleBtn.addEventListener('click', () => {
+        controlPanel.classList.toggle('collapsed');
     });
 }
 
@@ -653,6 +1091,7 @@ renderer.domElement.addEventListener('mousedown', onMouseDown);
 renderer.domElement.addEventListener('mousemove', onMouseMove);
 renderer.domElement.addEventListener('mouseup', onMouseUp);
 renderer.domElement.addEventListener('mouseleave', onMouseUp);
+renderer.domElement.addEventListener('wheel', onMouseWheel, { passive: false });
 
 // Border opacity update
 function updateBorderOpacity() {
@@ -687,7 +1126,7 @@ function updateBorderOpacity() {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
-    
+
     // FPS counter
     frames++;
     const currentTime = performance.now();
@@ -697,24 +1136,21 @@ function animate() {
         frames = 0;
         lastTime = currentTime;
     }
-    
+
     // Auto-rotate
     if (state.autoRotate && !state.isDragging) {
-        globe.rotation.y += state.rotationSpeed;
-        bordersGroup.rotation.y += state.rotationSpeed;
-        markersGroup.rotation.y += state.rotationSpeed;
-        connectionsGroup.rotation.y += state.rotationSpeed;
-        atmosphere.rotation.y += state.rotationSpeed;
-        glow.rotation.y += state.rotationSpeed;
+        [globe, countryFillsGroup, bordersGroup, markersGroup, connectionsGroup, atmosphere, starfield].forEach(obj => {
+            obj.rotation.y += state.rotationSpeed;
+        });
     }
-    
+
     // Animate marker glow
     markers.forEach((m, i) => {
         const time = Date.now() * 0.001;
         m.glow.material.opacity = 0.3 + Math.sin(time * 2 + i) * 0.2;
         m.glow.scale.setScalar(1 + Math.sin(time * 2 + i) * 0.2);
     });
-    
+
     updateBorderOpacity();
     renderer.render(scene, camera);
 }
@@ -734,4 +1170,5 @@ scene.add(ambientLight);
 loadCountryBorders();
 setupControls();
 setupSearch();
+setupResearchDataControls();
 animate();
