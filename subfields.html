@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Research Trends | Timeline View</title>
     
-    <!-- Modern Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="chatbot/chatbot.css" />
 
     <style>
       :root {
@@ -142,7 +143,7 @@
       .legend-title { font-size: 10px; text-transform: uppercase; color: var(--accent-secondary); margin-bottom: 6px; letter-spacing: 0.5px; }
 
       /* --- BUTTONS --- */
-      button {
+      button.ctrl-btn {
         width: 100%;
         padding: 10px;
         background: rgba(255,255,255,0.05);
@@ -153,10 +154,11 @@
         font-size: 12px;
         margin-top: 8px;
         transition: all 0.2s;
+        font-family: 'Inter', sans-serif;
       }
-      button:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
-      button.primary { background: rgba(56, 189, 248, 0.15); border-color: var(--accent-primary); color: var(--accent-primary); }
-      button.primary:hover { background: rgba(56, 189, 248, 0.25); }
+      button.ctrl-btn:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
+      button.ctrl-btn.primary { background: rgba(56, 189, 248, 0.15); border-color: var(--accent-primary); color: var(--accent-primary); }
+      button.ctrl-btn.primary:hover { background: rgba(56, 189, 248, 0.25); }
       
       /* --- LOADING --- */
       #loading {
@@ -175,7 +177,7 @@
       .node { stroke: var(--bg-color); stroke-width: 1.5px; transition: all 0.3s; cursor: pointer; }
       .node:hover { stroke: #fff; stroke-width: 2px; filter: drop-shadow(0 0 8px var(--accent-primary)); }
       .link { stroke: var(--text-muted); stroke-opacity: 0.2; transition: stroke-opacity 0.3s; pointer-events: none; }
-      .label { font-size: 10px; fill: var(--text-muted); text-anchor: middle; pointer-events: none; font-weight: 500; text-shadow: 0 2px 4px #000; }
+      .label { font-size: 10px; fill: var(--text-muted); text-anchor: middle; pointer-events: none; font-weight: 500; text-shadow: 0 2px 4px #000; font-family: 'Inter', sans-serif; }
 
       /* Tooltip */
       #tooltip {
@@ -184,11 +186,69 @@
         pointer-events: none; display: none; z-index: 200; min-width: 160px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(4px);
       }
+
+      /* --- CHATBOT THEME OVERRIDES --- */
+      /* These styles force the chatbot to match the Graph View theme */
+      .chat-button {
+        background-color: var(--accent-primary) !important;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.4) !important;
+        bottom: 30px !important;
+        right: 30px !important;
+      }
+      .chat-modal {
+        background: var(--panel-bg) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: 16px !important;
+        font-family: 'Inter', sans-serif !important;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+      }
+      .chat-modal-header {
+        border-bottom: 1px solid var(--border-color) !important;
+      }
+      .chat-modal-header h3 {
+        color: var(--text-main) !important;
+        font-weight: 600 !important;
+      }
+      .chat-input {
+        background: rgba(255,255,255,0.05) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-main) !important;
+        border-radius: 8px !important;
+      }
+      .chat-input:focus {
+        border-color: var(--accent-primary) !important;
+      }
+      .chat-send-btn {
+        background: var(--accent-primary) !important;
+        color: #0f172a !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+      }
+      .message.user .message-bubble {
+        background: var(--accent-primary) !important;
+        color: #0f172a !important;
+      }
+      .message.ai .message-bubble {
+        background: rgba(255,255,255,0.05) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-main) !important;
+      }
+      .suggested-question-btn {
+        background: rgba(255,255,255,0.05) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--accent-primary) !important;
+        border-radius: 6px !important;
+      }
+      .suggested-question-btn:hover {
+        background: rgba(56, 189, 248, 0.1) !important;
+        border-color: var(--accent-primary) !important;
+      }
     </style>
   </head>
   <body>
 
-    <!-- Loading Screen -->
     <div id="loading">
       <div class="loader"></div>
       <div style="font-size: 12px; letter-spacing: 1px; color: var(--text-muted);">LOADING TIMELINE DATA</div>
@@ -196,16 +256,14 @@
 
     <div id="graph-container"></div>
 
-    <!-- Controls -->
     <div id="control-panel" class="panel">
       <h2>Controls</h2>
-      <button id="back-btn" class="primary" style="display:none;">← Back to Overview</button>
-      <button id="reset-cam">Reset Camera</button>
-      <button id="toggle-labels">Toggle Labels</button>
-      <button onclick="window.location.href='/index.html'">Switch to Globe View</button>
+      <button id="back-btn" class="ctrl-btn primary" style="display:none;">← Back to Overview</button>
+      <button id="reset-cam" class="ctrl-btn">Reset Camera</button>
+      <button id="toggle-labels" class="ctrl-btn">Toggle Labels</button>
+      <button class="ctrl-btn" onclick="window.location.href='/globe.html'">Switch to Globe View</button>
     </div>
 
-    <!-- Info -->
     <div id="info-panel" class="panel">
       <h2 id="info-title">Analysis</h2>
       <div id="info-content">
@@ -268,14 +326,16 @@
       </div>
     </div>
 
-    <!-- Tooltip -->
     <div id="tooltip">
       <div style="color: var(--accent-primary); font-weight: 600; margin-bottom: 4px;" id="tooltip-title"></div>
       <div style="font-size: 12px; color: var(--text-main);">Works: <span id="tooltip-val" style="font-family: monospace;"></span></div>
     </div>
 
-    <!-- D3 Library -->
+    <div id="chatbot-container"></div>
+
     <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <script src="chatbot/chatbot.js"></script>
 
     <script>
       const API_BASE = "http://localhost:5000/api";
