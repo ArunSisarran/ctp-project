@@ -2,6 +2,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import os
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)  
@@ -18,12 +21,28 @@ def load_data():
         return data_cache
     
     try:
+        # Initialize with base files
         data_cache = {
             'fields': pd.read_csv(os.path.join(DATA_DIR, 'fields.csv')),
             'subfields': pd.read_csv(os.path.join(DATA_DIR, 'top_subfields_us.csv')),
             'funders': pd.read_csv(os.path.join(DATA_DIR, 'subfield_funders_us.csv')),
             'topics': pd.read_csv(os.path.join(DATA_DIR, 'top_topics_us.csv'))
         }
+        
+        # Load subfield topics data
+        subfield_topics_path = os.path.join(DATA_DIR, 'subfield_topics_us.csv')
+        if os.path.exists(subfield_topics_path):
+            data_cache['subfield_topics'] = pd.read_csv(subfield_topics_path)
+
+        # --- NEW: Load Yearly Trends Data ---
+        yearly_sf_path = os.path.join(DATA_DIR, 'yearly_subfields.csv')
+        if os.path.exists(yearly_sf_path):
+            data_cache['yearly_subfields'] = pd.read_csv(yearly_sf_path)
+            
+        yearly_tp_path = os.path.join(DATA_DIR, 'yearly_subfield_topics.csv')
+        if os.path.exists(yearly_tp_path):
+            data_cache['yearly_topics'] = pd.read_csv(yearly_tp_path)
+        
         print("✓ Data loaded successfully")
         return data_cache
     except Exception as e:
@@ -41,20 +60,12 @@ def reload_data():
 def home():
     return jsonify({
         'name': 'OpenAlex Physical Sciences API',
-        'version': '1.0',
+        'version': '1.2',
         'endpoints': {
-            '/api/health': 'Check API health and data status',
-            '/api/fields': 'Get all fields in the domain',
-            '/api/subfields': 'Get top 10 US subfields',
-            '/api/subfields/<id>': 'Get specific subfield by ID',
-            '/api/funders': 'Get all subfield funders',
-            '/api/funders/<subfield_id>': 'Get funder for specific subfield',
-            '/api/topics': 'Get top 10 US topics',
-            '/api/topics/<id>': 'Get specific topic by ID',
-            '/api/search/subfield?q=<query>': 'Search subfields by name',
-            '/api/search/topic?q=<query>': 'Search topics by name',
-            '/api/summary': 'Get complete data summary',
-            '/api/reload': 'Reload data from CSV files'
+            '/api/health': 'Check API health',
+            '/api/trends/years': 'Get list of available years',
+            '/api/trends/graph?year=2023': 'Get subfields graph for a specific year',
+            '/api/trends/topics?year=2023&subfield_id=X': 'Get topics graph for a subfield in a specific year'
         }
     })
 
@@ -62,213 +73,163 @@ def home():
 @app.route('/api/health')
 def health():
     data = load_data()
-    
     if data is None:
-        return jsonify({
-            'status': 'error',
-            'message': 'Data files not found. Run fetch_and_save_data.py first.'
-        }), 500
-    
-    fetch_date = data['fields']['fetch_date'].iloc[0] if 'fetch_date' in data['fields'].columns else 'Unknown'
-    
-    return jsonify({
-        'status': 'healthy',
-        'data_loaded': True,
-        'last_updated': fetch_date,
-        'records': {
-            'fields': len(data['fields']),
-            'subfields': len(data['subfields']),
-            'funders': len(data['funders']),
-            'topics': len(data['topics'])
-        }
-    })
+        return jsonify({'status': 'error', 'message': 'Data files not found'}), 500
+    return jsonify({'status': 'healthy', 'data_loaded': True})
 
 
+# --- EXISTING ENDPOINTS ---
 @app.route('/api/fields')
 def get_fields():
     data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    fields = data['fields'].to_dict('records')
-    return jsonify({
-        'count': len(fields),
-        'data': fields
-    })
+    return jsonify({'count': len(data['fields']), 'data': data['fields'].to_dict('records')})
 
-
-@app.route('/api/subfields')
-def get_subfields():
+@app.route('/api/subfields/graph')
+def get_subfields_graph():
+    """Standard All-Time Graph"""
     data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    subfields = data['subfields'].to_dict('records')
-    return jsonify({
-        'count': len(subfields),
-        'data': subfields
-    })
+    if data is None or 'subfields' not in data: return jsonify({'error': 'Data not loaded'}), 500
+    subfields_df = data['subfields'].head(10)
+    return generate_graph_from_df(subfields_df)
 
-
-@app.route('/api/subfields/<subfield_id>')
-def get_subfield_by_id(subfield_id):
+@app.route('/api/topics/subfield/<subfield_id>')
+def get_topics_by_subfield(subfield_id):
+    """All-Time Topics for a Subfield"""
     data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
+    if data is None or 'subfield_topics' not in data: return jsonify({'error': 'Data not loaded'}), 500
     try:
-        subfield_id = int(subfield_id)
+        sf_id = int(subfield_id)
+        topics_df = data['subfield_topics']
+        matching = topics_df[topics_df['subfield_id'] == sf_id]
+        if len(matching) == 0: return jsonify({'error': 'No topics found'}), 404
+        return generate_graph_from_df(matching)
     except ValueError:
-        return jsonify({'error': 'Invalid subfield ID'}), 400
-    
-    subfield = data['subfields'][data['subfields']['id'] == subfield_id]
-    
-    if subfield.empty:
-        return jsonify({'error': 'Subfield not found'}), 404
-    
-    subfield_data = subfield.iloc[0].to_dict()
-    
-    funder = data['funders'][data['funders']['subfield_id'] == subfield_id]
-    if not funder.empty:
-        subfield_data['top_funder'] = funder.iloc[0].to_dict()
-    
-    return jsonify(subfield_data)
+        return jsonify({'error': 'Invalid ID'}), 400
 
 
-@app.route('/api/funders')
-def get_funders():
-    """Get all subfield funders."""
+# --- TRENDS ENDPOINTS ---
+
+@app.route('/api/trends/years')
+def get_available_years():
+    """Returns list of years available in the dataset."""
     data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
+    if data is None or 'yearly_subfields' not in data:
+        return jsonify({'error': 'Yearly data not found. Run save_data_csv.py first.'}), 404
+    years = sorted(data['yearly_subfields']['year'].unique().tolist())
+    return jsonify({'years': years})
+
+
+@app.route('/api/trends/graph')
+def get_yearly_graph():
+    """Returns subfields graph for a specific year."""
+    year_param = request.args.get('year')
+    if not year_param: return jsonify({'error': 'Missing "year" parameter'}), 400
     
-    funders = data['funders'].to_dict('records')
-    return jsonify({
-        'count': len(funders),
-        'data': funders
-    })
-
-
-@app.route('/api/funders/<subfield_id>')
-def get_funder_by_subfield(subfield_id):
     data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
+    if data is None or 'yearly_subfields' not in data: return jsonify({'error': 'Yearly data not found'}), 404
     
     try:
-        subfield_id = int(subfield_id)
+        year = int(year_param)
+        df = data['yearly_subfields']
+        yearly_df = df[df['year'] == year]
+        
+        if yearly_df.empty: return jsonify({'error': f'No data found for year {year}'}), 404
+            
+        graph_data = generate_graph_from_df(yearly_df)
+        graph_data['year'] = year
+        return jsonify(graph_data)
+        
     except ValueError:
-        return jsonify({'error': 'Invalid subfield ID'}), 400
-    
-    funder = data['funders'][data['funders']['subfield_id'] == subfield_id]
-    
-    if funder.empty:
-        return jsonify({'error': 'Funder not found for this subfield'}), 404
-    
-    return jsonify(funder.iloc[0].to_dict())
+        return jsonify({'error': 'Year must be a number'}), 400
 
 
-@app.route('/api/topics')
-def get_topics():
+@app.route('/api/trends/topics')
+def get_yearly_topics_graph():
+    """
+    Returns topics graph for a specific subfield AND year.
+    Usage: /api/trends/topics?year=2023&subfield_id=3315
+    """
+    year_param = request.args.get('year')
+    subfield_id_param = request.args.get('subfield_id')
+
+    if not year_param or not subfield_id_param:
+        return jsonify({'error': 'Missing "year" or "subfield_id" parameter'}), 400
+
     data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    topics = data['topics'].to_dict('records')
-    return jsonify({
-        'count': len(topics),
-        'data': topics
-    })
+    if data is None or 'yearly_topics' not in data:
+        return jsonify({'error': 'Yearly topics data not found'}), 404
 
-
-@app.route('/api/topics/<topic_id>')
-def get_topic_by_id(topic_id):
-    data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    topic = data['topics'][data['topics']['id'] == topic_id]
-    
-    if topic.empty:
-        return jsonify({'error': 'Topic not found'}), 404
-    
-    return jsonify(topic.iloc[0].to_dict())
-
-
-@app.route('/api/search/subfield')
-def search_subfield():
-    query = request.args.get('q', '')
-    
-    if not query:
-        return jsonify({'error': 'Query parameter "q" is required'}), 400
-    
-    data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    results = data['subfields'][
-        data['subfields']['name'].str.contains(query, case=False, na=False)
-    ]
-    
-    return jsonify({
-        'query': query,
-        'count': len(results),
-        'data': results.to_dict('records')
-    })
-
-
-@app.route('/api/search/topic')
-def search_topic():
-    query = request.args.get('q', '')
-    
-    if not query:
-        return jsonify({'error': 'Query parameter "q" is required'}), 400
-    
-    data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    results = data['topics'][
-        data['topics']['name'].str.contains(query, case=False, na=False)
-    ]
-    
-    return jsonify({
-        'query': query,
-        'count': len(results),
-        'data': results.to_dict('records')
-    })
-
-
-@app.route('/api/summary')
-def get_summary():
-    data = load_data()
-    if data is None:
-        return jsonify({'error': 'Data not loaded'}), 500
-    
-    fetch_date = data['fields']['fetch_date'].iloc[0] if 'fetch_date' in data['fields'].columns else 'Unknown'
-    
-    return jsonify({
-        'last_updated': fetch_date,
-        'fields': data['fields'].to_dict('records'),
-        'top_subfields': data['subfields'].to_dict('records'),
-        'subfield_funders': data['funders'].to_dict('records'),
-        'top_topics': data['topics'].to_dict('records')
-    })
-
-
-@app.route('/api/reload', methods=['POST'])
-def reload():
     try:
-        reload_data()
-        return jsonify({
-            'status': 'success',
-            'message': 'Data reloaded successfully'
+        year = int(year_param)
+        # Convert subfield_id to string first to handle potential type mismatches in CSV
+        subfield_id = int(subfield_id_param)
+        
+        df = data['yearly_topics']
+        
+        # Filter by both Year and Subfield ID
+        filtered_df = df[
+            (df['year'] == year) & 
+            (df['subfield_id'] == subfield_id)
+        ]
+
+        if filtered_df.empty:
+            return jsonify({'error': f'No topics found for subfield {subfield_id} in {year}'}), 404
+
+        graph_data = generate_graph_from_df(filtered_df)
+        graph_data['year'] = year
+        graph_data['subfield_id'] = subfield_id
+        return jsonify(graph_data)
+
+    except ValueError:
+        return jsonify({'error': 'Parameters must be numbers'}), 400
+
+
+# --- HELPER FUNCTION ---
+def generate_graph_from_df(df):
+    nodes = []
+    names = []
+    
+    if df.empty: return {'nodes': [], 'links': []}
+
+    # 1. Build Nodes
+    for _, row in df.iterrows():
+        nodes.append({
+            'id': str(row['id']),
+            'name': row['name'],
+            'us_works_count': int(row['us_works_count']),
+            'size': 10 + (int(row['us_works_count']) / df['us_works_count'].max() * 40)
         })
+        names.append(row['name'])
+    
+    # 2. Build Links (Semantic Similarity)
+    links = []
+    try:
+        if len(names) > 1:
+            vectorizer = TfidfVectorizer(stop_words='english')
+            tfidf_matrix = vectorizer.fit_transform(names)
+            similarity_matrix = cosine_similarity(tfidf_matrix)
+            threshold = 0.10
+            
+            for i in range(len(nodes)):
+                for j in range(i + 1, len(nodes)):
+                    sim = float(similarity_matrix[i][j])
+                    if sim > threshold:
+                        links.append({
+                            'source': nodes[i]['id'],
+                            'target': nodes[j]['id'],
+                            'similarity': sim,
+                            'strength': sim
+                        })
     except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+        print(f"Similarity error: {e}")
+        links = []
+        
+    return {
+        'nodes': nodes,
+        'links': links,
+        'min_works_count': int(df['us_works_count'].min()),
+        'max_works_count': int(df['us_works_count'].max())
+    }
 
 
 if __name__ == '__main__':
