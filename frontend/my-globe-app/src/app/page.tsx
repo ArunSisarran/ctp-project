@@ -4,6 +4,8 @@ import { useState } from "react"
 import dynamic from "next/dynamic"
 import { Globe2 } from "lucide-react"
 import DashboardSidebar from "@/components/dashboard-sidebar"
+import ChatWidget from "@/components/chat-widget" 
+import { getCountryData } from "@/data/country-data" 
 
 const GlobeViz = dynamic(() => import("@/components/globe-viz"), {
   ssr: false,
@@ -28,13 +30,16 @@ export default function Home() {
     setSelectedCountry(null)
   }
 
+  // Get the full data object for the chat to use as context
+  const countryData = selectedCountry ? getCountryData(selectedCountry.code) : null
+
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-slate-950">
       {/* Globe Background */}
       <div className="absolute inset-0">
         <GlobeViz 
           onCountryClick={handleCountryClick} 
-          selectedCountryCode={selectedCountry?.code}  // <--- ADDED THIS LINE
+          selectedCountryCode={selectedCountry?.code}
         />
       </div>
 
@@ -55,6 +60,9 @@ export default function Home() {
         countryName={selectedCountry?.name || null}
         onClose={handleCloseSidebar}
       />
+
+      {/* AI Chat Widget */}
+      <ChatWidget countryData={countryData} />
 
       {/* Hint */}
       {!selectedCountry && (
