@@ -32,7 +32,10 @@ export default function Home() {
     <main className="relative h-screen w-screen overflow-hidden bg-slate-950">
       {/* Globe Background */}
       <div className="absolute inset-0">
-        <GlobeViz onCountryClick={handleCountryClick} />
+        <GlobeViz 
+          onCountryClick={handleCountryClick} 
+          selectedCountryCode={selectedCountry?.code}  // <--- ADDED THIS LINE
+        />
       </div>
 
       {/* Title Overlay */}
