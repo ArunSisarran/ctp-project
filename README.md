@@ -11,8 +11,7 @@
 
 ## Quick Start
 - **Go to frontend/my-globe-app**
-- Run **npm install** 
-- This installs Next.js, React, Tailwind, Recharts, Lucide, and the Google AI SDK.
+- Run **npm install** (This installs Next.js, React, Tailwind, Recharts, Lucide, and the Google AI SDK.)
 
 - **Go to backend/**
 - Run **pip install pandas pyalex python-dotenv**
@@ -22,5 +21,4 @@
 - Use this format **GEMINI_API_KEY=your_google_gemini_api_key_here**
 
 - **Go to frontend/my-globe-app**
-- Run **npm run dev**
-- This will start the website
+- Run **npm run dev** (This will start the website)
