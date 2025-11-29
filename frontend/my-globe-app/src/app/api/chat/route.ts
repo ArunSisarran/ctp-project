@@ -12,8 +12,6 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // UPDATED MODEL: "gemini-1.5-flash" is the current standard.
-    // If you want higher reasoning capability for "Why" questions, use "gemini-1.5-pro".
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     let contextPrompt = "";
@@ -26,7 +24,6 @@ export async function POST(req: Request) {
           trends: "Available in context if needed" 
         };
         
-        // --- THE KEY CHANGE IS HERE ---
         contextPrompt = `
         You are an expert Senior Research Analyst for a Global Science Dashboard. 
         
