@@ -49,7 +49,7 @@ export default function DashboardSidebar({ countryCode, countryName, onClose }: 
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-4xl">{flag}</span>
-            <h2 className="text-2xl font-bold text-white">{data?.countryName || countryName || "Unknown"}</h2>
+            <h2 className="text-2xl font-bold text-white">{countryName || data?.countryName || "Unknown"}</h2>
           </div>
           <button
             onClick={onClose}

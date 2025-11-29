@@ -31,7 +31,10 @@ export default function Home() {
   }
 
   // Get the full data object for the chat to use as context
-  const countryData = selectedCountry ? getCountryData(selectedCountry.code) : null
+  const rawCountryData = selectedCountry ? getCountryData(selectedCountry.code) : null
+  const countryData = rawCountryData && selectedCountry
+    ? { ...rawCountryData, countryName: selectedCountry.name }
+    : null
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-slate-950">

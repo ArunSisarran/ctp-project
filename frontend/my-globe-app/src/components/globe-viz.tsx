@@ -181,6 +181,11 @@ export default function GlobeViz({ onCountryClick, selectedCountryCode }: GlobeV
         polygonCapColor={getPolygonCapColor}
         polygonSideColor={getPolygonSideColor}
         polygonStrokeColor={getPolygonStrokeColor}
+        polygonLabel={({ properties: d }: any) => `
+          <div class="bg-slate-900/90 text-white px-3 py-1 rounded-md border border-cyan-500/30 text-xs font-sans backdrop-blur-md shadow-xl">
+            ${d.ADMIN}
+          </div>
+        `}
         polygonAltitude={(d) => {
           const feature = d as CountryFeature
           const code = feature.properties?.ISO_A2
