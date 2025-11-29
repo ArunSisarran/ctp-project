@@ -30,10 +30,11 @@ export default function Home() {
     setSelectedCountry(null)
   }
 
-  // Get the full data object for the chat to use as context
+  // Get the raw data
   const rawCountryData = selectedCountry ? getCountryData(selectedCountry.code) : null
-  const countryData = rawCountryData && selectedCountry
-    ? { ...rawCountryData, countryName: selectedCountry.name }
+  
+  const countryData = rawCountryData && selectedCountry 
+    ? { ...rawCountryData, countryName: selectedCountry.name } 
     : null
 
   return (
