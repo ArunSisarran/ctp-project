@@ -36,12 +36,11 @@ export default function DashboardSidebar({ countryCode, countryName, onClose }: 
   const activeColor = viewMode === 'volume' ? "#06b6d4" : "#a855f7" // Cyan vs Purple
   const activeLabel = viewMode === 'volume' ? "Most Research" : "Most Unique"
 
-  // Get trend data (Gracefully handle if we don't have trends for a niche unique topic)
   const activeTrendData = (data && activeSubfield) ? data.trends[activeSubfield] || [] : []
 
   return (
     <div
-      className={`fixed right-0 top-0 z-50 h-screen w-full max-w-md transform overflow-y-auto bg-black/80 backdrop-blur-md transition-transform duration-300 ease-out ${
+      className={`fixed right-0 top-0 z-50 h-screen w-full max-w-2xl transform overflow-y-auto bg-black/80 backdrop-blur-md transition-transform duration-300 ease-out ${
         isOpen ? "translate-x-0" : "translate-x-full"
       }`}
     >
@@ -114,18 +113,20 @@ export default function DashboardSidebar({ countryCode, countryName, onClose }: 
                     }}
                   >
                     <XAxis type="number" hide />
+                    
                     <YAxis 
                         type="category" 
                         dataKey="name" 
                         tick={{ fill: "#94a3b8", fontSize: 11 }} 
-                        width={120} 
+                        width={210} 
                     />
+                    
                     <Tooltip
                       cursor={{fill: 'transparent'}}
                       contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#fff" }}
+                      itemStyle={{ color: "#e2e8f0" }} 
                       formatter={(value: number, name: string, props: any) => {
                         if (viewMode === 'unique') {
-                           // Show score for unique mode
                            return [`${props.payload.score}x Global Avg`, "Specialization Score"]
                         }
                         return [value.toLocaleString(), "Total Works"]
@@ -175,6 +176,7 @@ export default function DashboardSidebar({ countryCode, countryName, onClose }: 
                       />
                       <Tooltip
                         contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#fff" }}
+                        itemStyle={{ color: "#e2e8f0" }}
                         formatter={(value: number) => [value.toLocaleString(), "Works"]}
                         labelFormatter={(label) => `Year: ${label}`}
                       />
