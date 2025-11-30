@@ -27,15 +27,6 @@ export default function ChatWidget({ countryData }: ChatWidgetProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isOpen])
 
-  // Reset chat when country changes
-  useEffect(() => {
-    if (countryData) {
-        setMessages(prev => [
-            ...prev, 
-            { role: 'bot', text: `I see you selected **${countryData.countryName}**. Ask me about their trends or unique specializations!` }
-        ])
-    }
-  }, [countryData?.countryCode])
 
   const handleSend = async () => {
     if (!input.trim()) return
@@ -77,7 +68,6 @@ export default function ChatWidget({ countryData }: ChatWidgetProps) {
   }
 
   return (
-    // CHANGED: "right-6" -> "left-6" and "items-end" -> "items-start"
     <div className="fixed bottom-6 left-6 z-50 flex flex-col items-start">
       {/* CHAT WINDOW */}
       {isOpen && (

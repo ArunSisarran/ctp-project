@@ -14,6 +14,8 @@ interface CountryFeature {
   type: "Feature"
   properties: {
     ISO_A2: string
+    ADM0_A3: string
+    ISO_A3: string
     ADMIN: string
   }
   geometry: any
@@ -35,6 +37,18 @@ export default function GlobeViz({ onCountryClick, selectedCountryCode }: GlobeV
   // Search State
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchActive, setIsSearchActive] = useState(false)
+
+  const getCountryCode = useCallback((d: any) => {
+    const properties = d.properties || {}
+    let code = properties.ISO_A2
+    
+    if (!code || code === "-99") {
+       const a3 = properties.ADM0_A3 || properties.ISO_A3
+       if (a3 === "FRA") code = "FR"
+       if (a3 === "NOR") code = "NO"
+    }
+    return code
+  }, [])
 
   useEffect(() => {
     import("react-globe.gl").then((mod) => {
@@ -64,7 +78,7 @@ export default function GlobeViz({ onCountryClick, selectedCountryCode }: GlobeV
   const handlePolygonClick = useCallback(
     (polygon: object) => {
       const feature = polygon as CountryFeature
-      const countryCode = feature.properties?.ISO_A2
+      const countryCode = getCountryCode(feature)
       const countryName = feature.properties?.ADMIN
 
       if (countryCode && countryName) {
@@ -89,25 +103,30 @@ export default function GlobeViz({ onCountryClick, selectedCountryCode }: GlobeV
         setIsSearchActive(false)
       }
     },
-    [onCountryClick],
+    [onCountryClick, getCountryCode],
   )
 
   const handlePolygonHover = useCallback((polygon: object | null) => {
-    const feature = polygon as CountryFeature | null
-    setHoveredCountry(feature?.properties?.ISO_A2 || null)
-  }, [])
+    if (!polygon) {
+        setHoveredCountry(null)
+        return
+    }
+    const feature = polygon as CountryFeature
+    const code = getCountryCode(feature) // Use helper
+    setHoveredCountry(code)
+  }, [getCountryCode])
 
   const getPolygonCapColor = useCallback(
     (polygon: object) => {
       const feature = polygon as CountryFeature
-      const code = feature.properties?.ISO_A2
+      const code = getCountryCode(feature) // Use helper
       
       if (code === hoveredCountry || code === selectedCountryCode) {
         return "rgba(0, 200, 255, 0.7)" // Bright Cyan for Selected/Hovered
       }
       return "rgba(100, 100, 150, 0.6)" // Default Blue
     },
-    [hoveredCountry, selectedCountryCode],
+    [hoveredCountry, selectedCountryCode, getCountryCode],
   )
 
   const getPolygonSideColor = useCallback(() => {
@@ -181,9 +200,14 @@ export default function GlobeViz({ onCountryClick, selectedCountryCode }: GlobeV
         polygonCapColor={getPolygonCapColor}
         polygonSideColor={getPolygonSideColor}
         polygonStrokeColor={getPolygonStrokeColor}
+        polygonLabel={({ properties: d }: any) => `
+            <div class="bg-slate-900/90 text-white px-3 py-1 rounded-md border border-cyan-500/30 text-xs font-sans backdrop-blur-md">
+              ${d.ADMIN}
+            </div>
+        `}
         polygonAltitude={(d) => {
           const feature = d as CountryFeature
-          const code = feature.properties?.ISO_A2
+          const code = getCountryCode(feature) // Use helper
           return (code === hoveredCountry || code === selectedCountryCode) ? 0.06 : 0.01
         }}
         onPolygonClick={handlePolygonClick}
