@@ -66,7 +66,7 @@ export default function Home() {
           />
           <div className={`transition-all duration-1000 ${isIntro ? "text-center" : "text-left"}`}>
             <h1 className="text-2xl font-bold text-white whitespace-nowrap">
-                Global Research Trends
+                Research Flow
             </h1>
             <p className={`text-gray-400 transition-all duration-1000 ${
                isIntro ? "text-sm mt-2 opacity-80" : "text-xs opacity-100"
