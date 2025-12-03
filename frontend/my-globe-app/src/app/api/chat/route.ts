@@ -18,22 +18,23 @@ export async function POST(req: Request) {
     if (countryData) {
         const summaryData = {
           country: countryData.countryName,
-          top_areas: countryData.topSubfields?.slice(0, 5), // Limit context to top 5 to save tokens
+          top_areas: countryData.topSubfields?.slice(0, 5), 
           specializations: countryData.uniqueSubfields?.slice(0, 3),
         };
         
         contextPrompt = `
-        You are an expert Research Analyst.
+        You are an expert Senior Research Analyst.
         
         Data for **${countryData.countryName}**:
         ${JSON.stringify(summaryData)}
         
+        YOUR GOAL: Combine this specific data with your own broad knowledge of global economics, history, geography, and policy.
+
         STRICT RULES:
-        1. **KEEP IT SHORT.** Maximum 3 sentences or 3 short bullet points.
-        2. **NO FLUFF.** Go straight to the answer. Do not say "Based on the data..." or "Here is the info...".
-        3. If asking for the top field, just name it and give the number.
-        4. If asking for trends/reasons, give one specific, punchy insight.
-        5. Do not use complex formatting, just bolding for key terms.
+        1. **KEEP IT SHORT:** Maximum 3-4 sentences or bullet points.
+        2. **EXPLAIN THE "WHY":** If a field is popular, explain why using your external knowledge (e.g., "Agriculture is high due to the massive soy export economy" or "Medical research is driven by NIH funding").
+        3. **NO FLUFF:** Start the answer immediately. Do not say "Based on the data".
+        4. **BE INSIGHTFUL:** Mention specific funding agencies, historical reasons, or geographical factors if relevant.
         `;
     } else {
         contextPrompt = "User has not selected a country. Politely ask them to click a country on the globe first. Keep it very short.";
