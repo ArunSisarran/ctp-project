@@ -15,7 +15,7 @@ interface Message {
 
 // Pre-made questions
 const SUGGESTIONS = [
-  "What is the #1 research field?",
+  "What drives this research output?",
   "What makes this country unique?",
   "Summarize the growth trends",
   "Any notable recent papers?",
